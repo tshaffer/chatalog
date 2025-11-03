@@ -3,6 +3,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
+import { createRoutes } from './routes';   // ← add this
 
 const PORT = Number(process.env.PORT || 8080);
 
@@ -12,11 +13,14 @@ async function main() {
   app.use(cors({ origin: true, credentials: true }));
   app.use(express.json({ limit: '1mb' }));
 
-  // Health
+  // Health (server)
   app.get('/healthz', (_req, res) => res.json({ ok: true }));
 
-  // Static frontend (served from backend/public by your webpack build)
-  const publicDir = path.join(__dirname, '../public');
+  // API v1
+  createRoutes(app);                        // ← add this
+
+  // Static frontend
+  const publicDir = path.join(__dirname, '../public');  // fixed path
   if (fs.existsSync(publicDir)) {
     app.use(express.static(publicDir));
     app.get('*', (req, res, next) => {
@@ -27,7 +31,7 @@ async function main() {
     console.warn(`[WARN] No frontend build at ${publicDir}. Run frontend build first.`);
   }
 
-  // Central error handler
+  // Error handler
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = Number(err?.statusCode || err?.status || 500);
     const message = typeof err?.message === 'string' ? err.message : 'Internal Server Error';
