@@ -1,6 +1,6 @@
-// chatalog/client/src/components/MainArea.tsx
-import { useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+// src/components/MainArea.tsx
+import { useMemo, useCallback } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
   Divider,
@@ -21,10 +21,22 @@ import {
   findTopicBySlug,
   findNoteBySlug,
 } from '../selectors/chatalogSelectors';
+import ResizeHandle from './ResizeHandle';
+import { usePersistentState } from '../hooks/usePersistentState';
+
+const MIN_LIST = 260;
+const MAX_LIST = 720;
+const DEFAULT_LIST = 420;
 
 export default function MainArea() {
   const { subjectSlug, topicSlug, noteSlug } = useParams();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+
+  const [noteListWidth, setNoteListWidth] = usePersistentState<number>(
+    'ui.noteListWidth',
+    DEFAULT_LIST
+  );
 
   const subject = useMemo(() => findSubjectBySlug(subjectSlug), [subjectSlug]);
   const topic = useMemo(
@@ -35,20 +47,33 @@ export default function MainArea() {
     () => findNoteBySlug(topic?._id, noteSlug),
     [topic?._id, noteSlug]
   );
-
   const noteList = useMemo(
     () => getNotePreviewsForTopic(topic?._id),
     [topic?._id]
   );
 
+  const onDrag = useCallback(
+    (dx: number) => {
+      setNoteListWidth((w) => {
+        const next = Math.min(MAX_LIST, Math.max(MIN_LIST, w + dx));
+        return next;
+      });
+    },
+    [setNoteListWidth]
+  );
+
   const goToNote = (title: string) => {
-    // Using title → slug fallback because NotePreview doesn’t include slug.
-    const slug = slugify(title);
+    const slug = slugify(title); // fallback since NotePreview lacks slug
     navigate(`/s/${subject?.slug}/t/${topic?.slug}/n/${slug}`);
   };
 
   return (
-    <Box display="grid" gridTemplateColumns="420px 1fr" height="100%" overflow="hidden">
+    <Box
+      display="grid"
+      gridTemplateColumns={`${noteListWidth}px 6px 1fr`}
+      height="100%"
+      overflow="hidden"
+    >
       {/* Left: Note list */}
       <Box overflow="auto" p={2}>
         <Typography variant="overline" color="text.secondary">
@@ -84,7 +109,7 @@ export default function MainArea() {
                 ) : null}
               </ListItemButton>
             ))}
-            {noteList.length === 0 && (
+            {noteList.length === 0 && topic && (
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1, ml: 1 }}>
                 No notes in this topic yet.
               </Typography>
@@ -93,7 +118,8 @@ export default function MainArea() {
         )}
       </Box>
 
-      <Divider orientation="vertical" flexItem />
+      {/* Center handle */}
+      <ResizeHandle aria-label="Resize note list" onDrag={onDrag} />
 
       {/* Right: Note detail */}
       <Box overflow="auto" p={3}>
@@ -102,13 +128,11 @@ export default function MainArea() {
             Choose a note from the list.
           </Typography>
         )}
-
         {!topic && !note && (
           <Typography variant="body2" color="text.secondary">
             Pick a subject and topic to begin.
           </Typography>
         )}
-
         {note && (
           <>
             <Typography variant="h6" gutterBottom>
