@@ -1,43 +1,60 @@
 import React from 'react';
-import Button from '@mui/material/Button';
-import Paper from '@mui/material/Paper';
-import Typography from '@mui/material/Typography';
-import Box from '@mui/material/Box';
-import Alert from '@mui/material/Alert';
-
+import { Grid, Paper, Typography, Box, Alert } from '@mui/material';
+import HierarchySidebar from '../components/HierarchySidebar';
+import { MOCK_HIERARCHY } from '../mock/hierarchy';
 import { fetchSampleNote, clearSample } from '../features/notes/notesSlice';
 import { useAppDispatch, useAppSelector } from '../store';
 
 export default function Notes() {
   const dispatch = useAppDispatch();
   const { sample, status, error } = useAppSelector(s => s.notes);
-
   const loading = status === 'loading';
 
+  function handleSelectNote() {
+    // For now, selecting any note triggers the sample fetch (placeholder)
+    if (!loading) dispatch(fetchSampleNote());
+  }
+
   return (
-    <>
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+    <Grid container spacing={2}>
+      <Grid item xs={12} md={4} lg={3}>
+        <Paper variant="outlined" sx={{ p: 1 }}>
+          <HierarchySidebar data={MOCK_HIERARCHY} onSelectNote={handleSelectNote} />
+        </Paper>
+      </Grid>
 
-      <Button onClick={() => dispatch(fetchSampleNote())} disabled={loading} variant="contained" sx={{ mr: 1 }}>
-        {loading ? 'Loading…' : 'Fetch sample note'}
-      </Button>
-      <Button onClick={() => dispatch(clearSample())} disabled={loading} variant="outlined">
-        Clear
-      </Button>
+      <Grid item xs={12} md={8} lg={9}>
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-      {sample && (
-        <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
-          <Typography variant="h6" gutterBottom>{sample.title}</Typography>
-          {sample.summary && (
-            <Typography variant="body1" color="text.secondary" gutterBottom>
-              {sample.summary}
+        <Paper variant="outlined" sx={{ p: 2, minHeight: 280 }}>
+          {sample ? (
+            <>
+              <Typography variant="h6" gutterBottom>{sample.title}</Typography>
+              {sample.summary && (
+                <Typography variant="body1" color="text.secondary" gutterBottom>
+                  {sample.summary}
+                </Typography>
+              )}
+              <Box component="pre" sx={{ mt: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1, overflowX: 'auto' }}>
+                {JSON.stringify(sample, null, 2)}
+              </Box>
+              <Box sx={{ mt: 2 }}>
+                <Typography
+                  color="primary"
+                  sx={{ cursor: 'pointer' }}
+                  onClick={() => dispatch(clearSample())}
+                >
+                  Clear
+                </Typography>
+              </Box>
+            </>
+          ) : (
+            <Typography color="text.secondary">
+              Select a note from the left to load an example detail (currently the sample endpoint).
             </Typography>
           )}
-          <Box component="pre" sx={{ mt: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1, overflowX: 'auto' }}>
-            {JSON.stringify(sample, null, 2)}
-          </Box>
         </Paper>
-      )}
-    </>
+      </Grid>
+    </Grid>
   );
 }
