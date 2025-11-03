@@ -2,12 +2,12 @@ import React from 'react';
 import { Grid, Paper, Typography, Box, Alert } from '@mui/material';
 import HierarchySidebar from '../components/HierarchySidebar';
 import { MOCK_HIERARCHY } from '../mock/hierarchy';
-import { fetchSampleNote, clearSample } from '../features/notes/notesSlice';
+import { fetchSampleNote, clearSample, selectNotesState } from '../features/notes/notesSlice';
 import { useAppDispatch, useAppSelector } from '../store';
 
 export default function Notes() {
   const dispatch = useAppDispatch();
-  const { sample, status, error } = useAppSelector(s => s.notes);
+  const { sample, status, error } = useAppSelector(selectNotesState);
   const loading = status === 'loading';
 
   function handleSelectNote() {

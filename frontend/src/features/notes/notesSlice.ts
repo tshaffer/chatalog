@@ -1,6 +1,7 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import type { NotePreview } from '../../../../shared/src/types';
 import { getNotesSample } from '../../api/client';
+import type { RootState } from '../../store';
 
 export interface NotesState {
   sample: NotePreview | null;
@@ -47,3 +48,6 @@ const notesSlice = createSlice({
 
 export const { clearSample } = notesSlice.actions;
 export default notesSlice.reducer;
+
+// selectors
+export const selectNotesState = (state: RootState) => state.notes;
