@@ -1,5 +1,17 @@
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { ThemeProvider } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
+import AppBar from '@mui/material/AppBar';
+import Toolbar from '@mui/material/Toolbar';
+import Typography from '@mui/material/Typography';
+import Container from '@mui/material/Container';
+import Button from '@mui/material/Button';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+
+import { theme } from './theme';
 import { getNotesSample } from './api/client';
 import type { NotePreview } from '../../shared/src/types';
 
@@ -22,24 +34,62 @@ function App() {
   }
 
   return (
-    <div style={{ padding: 16, fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif' }}>
-      <h1 style={{ marginTop: 0 }}>Chatalog</h1>
-      <button onClick={handleClick} disabled={loading} style={{ padding: '8px 12px', cursor: 'pointer' }}>
-        {loading ? 'Loading…' : 'Fetch sample note'}
-      </button>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <AppBar position="sticky" color="primary" enableColorOnDark>
+        <Toolbar>
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            Chatalog
+          </Typography>
+          <Button
+            color="inherit"
+            onClick={handleClick}
+            disabled={loading}
+            variant="outlined"
+            sx={{ bgcolor: 'rgba(255,255,255,0.08)' }}
+          >
+            {loading ? 'Loading…' : 'Fetch sample note'}
+          </Button>
+        </Toolbar>
+      </AppBar>
 
-      {err && (
-        <div style={{ color: 'crimson', marginTop: 12 }}>
-          Error: {err}
-        </div>
-      )}
+      <Container maxWidth="md" sx={{ py: 3 }}>
+        {err && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {err}
+          </Alert>
+        )}
 
-      {data && (
-        <pre style={{ marginTop: 12, background: '#f7f7f7', padding: 12, borderRadius: 6, overflowX: 'auto' }}>
-{JSON.stringify(data, null, 2)}
-        </pre>
-      )}
-    </div>
+        {data ? (
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              {data.title}
+            </Typography>
+            {data.summary && (
+              <Typography variant="body1" color="text.secondary" gutterBottom>
+                {data.summary}
+              </Typography>
+            )}
+            <Box
+              component="pre"
+              sx={{
+                mt: 2,
+                p: 2,
+                bgcolor: 'action.hover',
+                borderRadius: 1,
+                overflowX: 'auto'
+              }}
+            >
+              {JSON.stringify(data, null, 2)}
+            </Box>
+          </Paper>
+        ) : (
+          <Typography color="text.secondary">
+            Click “Fetch sample note” to load an example response from the backend.
+          </Typography>
+        )}
+      </Container>
+    </ThemeProvider>
   );
 }
 
