@@ -6,9 +6,12 @@ import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { RouterProvider } from 'react-router-dom';
 
+import { setupListeners } from '@reduxjs/toolkit/query';
 import { store } from './store';
 import { theme } from './theme';
 import { router } from './router';  // <-- make sure this matches your new router.tsx export
+
+setupListeners(store.dispatch);
 
 function Root() {
   return (

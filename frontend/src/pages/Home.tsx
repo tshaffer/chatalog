@@ -1,5 +1,5 @@
-// src/pages/Home.tsx
-import { useMemo } from 'react';
+// frontend/src/pages/Home.tsx
+import { memo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -9,14 +9,20 @@ import {
   CardContent,
   Chip,
   Divider,
+  Skeleton,
   Stack,
   Typography,
 } from '@mui/material';
-import { getAllSubjects, getTopicsForSubject } from '../selectors/chatalogSelectors';
+import {
+  useGetSubjectsQuery,
+  useGetTopicsBySubjectQuery,
+} from '../features/api/chatalogApi';
 
 export default function Home() {
   const navigate = useNavigate();
-  const subjects = useMemo(() => getAllSubjects(), []);
+  const { data: subjects = [], isLoading } = useGetSubjectsQuery();
+
+  // show up to three subjects as “quick links”
   const topSubjects = subjects.slice(0, 3);
 
   return (
@@ -46,41 +52,24 @@ export default function Home() {
       <Typography variant="overline" color="text.secondary">
         Quick Links
       </Typography>
+
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 1 }}>
-        {topSubjects.map((s) => {
-          const topics = getTopicsForSubject(s._id).slice(0, 3);
-          return (
-            <Card key={s._id} variant="outlined" sx={{ minWidth: 260, flex: 1 }}>
-              {/* NOT a Link — use onClick navigate to avoid nested <a> */}
-              <CardActionArea onClick={() => navigate(`/s/${s.slug}`)}>
-                <CardContent>
-                  <Typography variant="h6" gutterBottom>
-                    {s.name}
-                  </Typography>
-                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                    {topics.map((t) => (
-                      <Chip
-                        key={t._id}
-                        size="small"
-                        label={t.name}
-                        component={Link}
-                        to={`/s/${s.slug}/t/${t.slug}`}
-                        clickable
-                        onClick={(e) => e.stopPropagation()} // prevent card onClick
-                        sx={{ mr: 0.5, mb: 0.5 }}
-                      />
-                    ))}
-                    {topics.length === 0 && (
-                      <Typography variant="caption" color="text.secondary">
-                        No topics yet
-                      </Typography>
-                    )}
-                  </Stack>
-                </CardContent>
-              </CardActionArea>
-            </Card>
-          );
-        })}
+        {isLoading && (
+          <>
+            <Skeleton variant="rounded" height={140} sx={{ flex: 1, minWidth: 260 }} />
+            <Skeleton variant="rounded" height={140} sx={{ flex: 1, minWidth: 260 }} />
+            <Skeleton variant="rounded" height={140} sx={{ flex: 1, minWidth: 260 }} />
+          </>
+        )}
+        {!isLoading &&
+          topSubjects.map((s) => (
+            <SubjectCard key={s._id} subjectId={s._id} subjectSlug={s.slug} subjectName={s.name} />
+          ))}
+        {!isLoading && topSubjects.length === 0 && (
+          <Typography variant="body2" color="text.secondary">
+            No subjects yet.
+          </Typography>
+        )}
       </Stack>
 
       <Box sx={{ mt: 4 }}>
@@ -92,3 +81,59 @@ export default function Home() {
     </Box>
   );
 }
+
+/**
+ * Separate component so we can call a hook per subject (legal hook usage).
+ * Avoids nested <a> by using onClick navigate for the card, and Link on chips.
+ */
+const SubjectCard = memo(function SubjectCard(props: {
+  subjectId: string;
+  subjectSlug: string;
+  subjectName: string;
+}) {
+  const navigate = useNavigate();
+  const { data: topics = [], isLoading } = useGetTopicsBySubjectQuery(props.subjectId);
+
+  const chips = topics.slice(0, 3);
+
+  return (
+    <Card variant="outlined" sx={{ minWidth: 260, flex: 1 }}>
+      {/* NOT a Link: use onClick navigate to avoid nested <a> */}
+      <CardActionArea onClick={() => navigate(`/s/${props.subjectSlug}`)}>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>
+            {props.subjectName}
+          </Typography>
+
+          {isLoading ? (
+            <Stack direction="row" spacing={1}>
+              <Skeleton variant="rounded" width={80} height={24} />
+              <Skeleton variant="rounded" width={80} height={24} />
+              <Skeleton variant="rounded" width={80} height={24} />
+            </Stack>
+          ) : (
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+              {chips.map((t) => (
+                <Chip
+                  key={t._id}
+                  size="small"
+                  label={t.name}
+                  component={Link}
+                  to={`/s/${props.subjectSlug}/t/${t.slug}`}
+                  clickable
+                  onClick={(e) => e.stopPropagation()} // prevent card onClick
+                  sx={{ mr: 0.5, mb: 0.5 }}
+                />
+              ))}
+              {chips.length === 0 && (
+                <Typography variant="caption" color="text.secondary">
+                  No topics yet
+                </Typography>
+              )}
+            </Stack>
+          )}
+        </CardContent>
+      </CardActionArea>
+    </Card>
+  );
+});

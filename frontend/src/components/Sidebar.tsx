@@ -1,27 +1,34 @@
 import { useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { List, ListItemButton, ListSubheader, Typography, Divider } from '@mui/material';
-import { getAllSubjects, getTopicsForSubject, findSubjectBySlug } from '../selectors/chatalogSelectors';
+import {
+  useGetSubjectsQuery,
+  useGetSubjectBySlugQuery,
+  useGetTopicsBySubjectQuery,
+} from '../features/api/chatalogApi';
 
 export default function Sidebar() {
   const { subjectSlug, topicSlug } = useParams();
   const navigate = useNavigate();
 
-  const allSubjects = useMemo(() => getAllSubjects(), []);
-  const selectedSubject = useMemo(() => findSubjectBySlug(subjectSlug), [subjectSlug]);
-  const topics = useMemo(
-    () => getTopicsForSubject(selectedSubject?._id),
-    [selectedSubject?._id]
+  const { data: subjects = [], isLoading: sLoading } = useGetSubjectsQuery();
+  const { data: selectedSubject } = useGetSubjectBySlugQuery(subjectSlug ?? '', {
+    skip: !subjectSlug,
+  });
+  const { data: topics = [], isLoading: tLoading } = useGetTopicsBySubjectQuery(
+    selectedSubject?._id ?? '',
+    { skip: !selectedSubject?._id }
   );
 
   return (
     <nav aria-label="Chatalog hierarchy" style={{ borderRight: '1px solid #eee', overflow: 'auto' }}>
       <List subheader={<ListSubheader component="div">Subjects</ListSubheader>} dense>
-        {allSubjects.map(s => (
+        {sLoading && <Typography variant="caption" sx={{ px: 2, py: 1 }}>Loading…</Typography>}
+        {subjects.map((s) => (
           <ListItemButton
             key={s._id}
             selected={s.slug === subjectSlug}
-            onClick={() => { const path = `/s/${s.slug}`; navigate(path); }}
+            onClick={() => navigate(`/s/${s.slug}`)}
           >
             <Typography variant="body2">{s.name}</Typography>
           </ListItemButton>
@@ -31,12 +38,15 @@ export default function Sidebar() {
       <Divider />
 
       <List subheader={<ListSubheader component="div">Topics</ListSubheader>} dense>
-        {topics.map(t => (
+        {selectedSubject && tLoading && (
+          <Typography variant="caption" sx={{ px: 2, py: 1 }}>Loading…</Typography>
+        )}
+        {topics.map((t) => (
           <ListItemButton
             key={t._id}
             selected={t.slug === topicSlug}
             disabled={!selectedSubject}
-            onClick={() => { const path = `/s/${selectedSubject!.slug}/t/${t.slug}`; navigate(path); }}
+            onClick={() => navigate(`/s/${selectedSubject!.slug}/t/${t.slug}`)}
           >
             <Typography variant="body2">{t.name}</Typography>
           </ListItemButton>
