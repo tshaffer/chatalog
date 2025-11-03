@@ -1,4 +1,4 @@
-import type { Subject, Topic, NotePreview } from '../../../shared/src/types';
+import type { Subject, Topic, NotePreview } from '@shared/types';
 
 export interface TopicWithNotes extends Topic {
   notes: NotePreview[];

@@ -1,4 +1,4 @@
-import type { NotePreview } from '../../../shared/src/types';
+import type { NotePreview } from '@shared/types';
 import { fetchJSON } from '../lib/fetchJSON';
 
 const API_BASE = '/api/v1';

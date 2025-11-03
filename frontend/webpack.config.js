@@ -20,7 +20,10 @@ module.exports = {
   target: 'web',
   devtool: isProd ? 'source-map' : 'eval-source-map',
   resolve: {
-    extensions: ['.ts', '.tsx', '.js', '.json', '.css']
+    extensions: ['.ts', '.tsx', '.mjs', '.js', '.jsx'],
+    alias: {
+      '@shared': require('path').resolve(__dirname, '../shared/src'),
+    },
   },
   module: {
     rules: [

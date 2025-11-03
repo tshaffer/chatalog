@@ -23,7 +23,7 @@ async function main() {
   const publicDir = path.join(__dirname, '../public');  // fixed path
   if (fs.existsSync(publicDir)) {
     app.use(express.static(publicDir));
-    app.get('*', (req, res, next) => {
+    app.get(/.*/, (req, res, next) => {
       if (req.path.startsWith('/api/')) return next();
       res.sendFile(path.join(publicDir, 'index.html'));
     });

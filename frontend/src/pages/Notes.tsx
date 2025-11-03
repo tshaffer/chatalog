@@ -1,9 +1,10 @@
 import React from 'react';
-import { Grid, Paper, Typography, Box, Alert } from '@mui/material';
+import { Paper, Typography, Box, Alert } from '@mui/material';
 import HierarchySidebar from '../components/HierarchySidebar';
 import { MOCK_HIERARCHY } from '../mock/hierarchy';
 import { fetchSampleNote, clearSample, selectNotesState } from '../features/notes/notesSlice';
 import { useAppDispatch, useAppSelector } from '../store';
+import Grid from '@mui/material/Grid';
 
 export default function Notes() {
   const dispatch = useAppDispatch();
@@ -17,13 +18,13 @@ export default function Notes() {
 
   return (
     <Grid container spacing={2}>
-      <Grid item xs={12} md={4} lg={3}>
+      <Grid size={{ xs: 12, md: 3, lg: 3 }}>
         <Paper variant="outlined" sx={{ p: 1 }}>
           <HierarchySidebar data={MOCK_HIERARCHY} onSelectNote={handleSelectNote} />
         </Paper>
       </Grid>
 
-      <Grid item xs={12} md={8} lg={9}>
+      <Grid size={{ xs: 12, md: 8, lg: 9 }}>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
         <Paper variant="outlined" sx={{ p: 2, minHeight: 280 }}>

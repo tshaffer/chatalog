@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import type { NotePreview } from '../../../../shared/src/types';
+import type { NotePreview } from '@shared/types';
 import { getNotesSample } from '../../api/client';
 import type { RootState } from '../../store';
 
