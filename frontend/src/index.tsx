@@ -1,13 +1,14 @@
+// chatalog/client/src/index.tsx
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { Provider } from 'react-redux';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { RouterProvider } from 'react-router-dom';
-import { Provider } from 'react-redux';
 
-import { theme } from './theme';
-import { router } from './routes';
 import { store } from './store';
+import { theme } from './theme';
+import { router } from './router';  // <-- make sure this matches your new router.tsx export
 
 function Root() {
   return (
