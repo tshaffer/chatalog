@@ -16,7 +16,7 @@ async function main() {
   app.get('/healthz', (_req, res) => res.json({ ok: true }));
 
   // Static frontend (served from backend/public by your webpack build)
-  const publicDir = path.resolve(process.cwd(), 'backend/public');
+  const publicDir = path.join(__dirname, '../public');
   if (fs.existsSync(publicDir)) {
     app.use(express.static(publicDir));
     app.get('*', (req, res, next) => {
