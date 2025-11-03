@@ -1,49 +1,40 @@
-import React, { useState } from 'react';
+import React from 'react';
 import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
 import Alert from '@mui/material/Alert';
 
-import { getNotesSample } from '../api/client';
-import type { NotePreview } from '../../../shared/src/types';
+import { fetchSampleNote, clearSample } from '../features/notes/notesSlice';
+import { useAppDispatch, useAppSelector } from '../store';
 
 export default function Notes() {
-  const [data, setData] = useState<NotePreview | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const dispatch = useAppDispatch();
+  const { sample, status, error } = useAppSelector(s => s.notes);
 
-  async function handleClick() {
-    setLoading(true);
-    setErr(null);
-    try {
-      const sample = await getNotesSample();
-      setData(sample);
-    } catch (e: any) {
-      setErr(e?.message ?? 'Request failed');
-    } finally {
-      setLoading(false);
-    }
-  }
+  const loading = status === 'loading';
 
   return (
     <>
-      {err && <Alert severity="error" sx={{ mb: 2 }}>{err}</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-      <Button onClick={handleClick} disabled={loading} variant="contained">
+      <Button onClick={() => dispatch(fetchSampleNote())} disabled={loading} variant="contained" sx={{ mr: 1 }}>
         {loading ? 'Loading…' : 'Fetch sample note'}
       </Button>
+      <Button onClick={() => dispatch(clearSample())} disabled={loading} variant="outlined">
+        Clear
+      </Button>
 
-      {data && (
+      {sample && (
         <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
-          <Typography variant="h6" gutterBottom>{data.title}</Typography>
-          {data.summary && (
+          <Typography variant="h6" gutterBottom>{sample.title}</Typography>
+          {sample.summary && (
             <Typography variant="body1" color="text.secondary" gutterBottom>
-              {data.summary}
+              {sample.summary}
             </Typography>
           )}
           <Box component="pre" sx={{ mt: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1, overflowX: 'auto' }}>
-            {JSON.stringify(data, null, 2)}
+            {JSON.stringify(sample, null, 2)}
           </Box>
         </Paper>
       )}
