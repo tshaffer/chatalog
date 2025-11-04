@@ -1,44 +1,84 @@
 import { useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Box, Divider, List, ListItemButton, ListItemText, Typography, Chip, Stack } from '@mui/material';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
-import {
-  useGetSubjectBySlugQuery,
-  useGetTopicBySlugQuery,
-  useGetNotePreviewsByTopicQuery,
-  useGetNoteBySlugQuery,
-} from '../features/api/chatalogApi';
+import { Box, List, ListItemButton, ListItemText, Typography, Chip, Stack } from '@mui/material';
+
+import NoteEditor from '../features/notes/NoteEditor';
+import { useGetNoteQuery } from '../features/notes/notesApi';
 import { usePersistentState } from '../hooks/usePersistentState';
 import ResizeHandle from './ResizeHandle';
+import {
+  useGetNotePreviewsForTopicQuery,
+  useGetSubjectsQuery,
+  useGetTopicsForSubjectQuery,
+} from '../features/subjects/subjectsApi';
 
 const MIN_LIST = 260;
 const MAX_LIST = 720;
 const DEFAULT_LIST = 420;
 
+function slugify(s: string) {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
+
 export default function MainArea() {
-  const { subjectSlug, topicSlug, noteSlug } = useParams();
+  // Route params: pretty slugs for subject/topic, ID-first for note with cosmetic slug
+  const { subjectSlug, topicSlug, noteId: noteIdParam, noteSlug } = useParams<{
+    subjectSlug?: string;
+    topicSlug?: string;
+    noteId?: string;   // pattern: <id> or <id>-<slug>
+    noteSlug?: string; // present only when route used :noteId-:noteSlug
+  }>();
   const navigate = useNavigate();
 
-  const { data: subject } = useGetSubjectBySlugQuery(subjectSlug ?? '', { skip: !subjectSlug });
-  const { data: topic } = useGetTopicBySlugQuery(
-    { subjectId: subject?._id ?? '', slug: topicSlug ?? '' },
-    { skip: !subject?._id || !topicSlug }
+  // --- Subject by slug (client-side) ---
+  const { data: subjects = [] } = useGetSubjectsQuery();
+  const subject = useMemo(
+    () => subjects.find((s) => s.slug === subjectSlug),
+    [subjects, subjectSlug]
   );
-  const { data: previews = [] } = useGetNotePreviewsByTopicQuery(topic?._id ?? '', {
-    skip: !topic?._id,
+
+  // --- Topics for subject (ID-based) ---
+  const { data: topics = [] } = useGetTopicsForSubjectQuery(subject?._id ?? '', {
+    skip: !subject?._id,
   });
-  const { data: note } = useGetNoteBySlugQuery(
-    { topicId: topic?._id ?? '', slug: noteSlug ?? '' },
-    { skip: !topic?._id || !noteSlug }
+  const topic = useMemo(
+    () => topics.find((t) => t.slug === topicSlug),
+    [topics, topicSlug]
   );
 
-  const [noteListWidth, setNoteListWidth] = usePersistentState<number>('ui.noteListWidth', DEFAULT_LIST);
+  // --- Note previews for topic (ID-based) ---
+  const { data: previews = [] } = useGetNotePreviewsForTopicQuery(
+    { subjectId: subject?._id ?? '', topicId: topic?._id ?? '' },
+    { skip: !subject?._id || !topic?._id }
+  );
 
-  const goToNote = (title: string) => {
-    const slug = slugify(title);
-    navigate(`/s/${subject?.slug}/t/${topic?.slug}/n/${slug}`);
+  // --- Note detail (ID-only for editor) ---
+  const noteIdOnly = useMemo(() => (noteIdParam ?? '').split('-')[0], [noteIdParam]);
+
+  // Fetch note as well so we can canonicalize the URL slug (RTKQ will de-dupe with NoteEditor)
+  const { data: note } = useGetNoteQuery(noteIdOnly, { skip: !noteIdOnly });
+
+  // Optional: canonicalize URL if slug changed/missing
+  if (note && subject && topic) {
+    const expectedSlug = slugify(note.title);
+    const currentSlug = noteSlug ?? '';
+    if (expectedSlug !== currentSlug) {
+      const next = `/s/${subject.slug}/t/${topic.slug}/n/${note._id}-${expectedSlug}`;
+      if (next !== location.pathname) {
+        queueMicrotask(() => navigate(next, { replace: true }));
+      }
+    }
+  }
+
+  const [noteListWidth, setNoteListWidth] = usePersistentState<number>(
+    'ui.noteListWidth',
+    DEFAULT_LIST
+  );
+
+  const goToNote = (id: string, title: string) => {
+    if (!subject || !topic) return;
+    const s = slugify(title);
+    navigate(`/s/${subject.slug}/t/${topic.slug}/n/${id}-${s}`);
   };
 
   return (
@@ -53,8 +93,8 @@ export default function MainArea() {
             {previews.map((n) => (
               <ListItemButton
                 key={n._id}
-                selected={note?._id === n._id}
-                onClick={() => goToNote(n.title)}
+                selected={noteIdOnly === n._id}
+                onClick={() => goToNote(n._id, n.title)}
               >
                 <ListItemText
                   primary={n.title}
@@ -83,41 +123,23 @@ export default function MainArea() {
       {/* Center handle */}
       <ResizeHandle
         aria-label="Resize note list"
-        onDrag={(dx) =>
-          setNoteListWidth((w) => Math.min(MAX_LIST, Math.max(MIN_LIST, w + dx)))
-        }
+        onDrag={(dx) => setNoteListWidth((w) => Math.min(MAX_LIST, Math.max(MIN_LIST, w + dx)))}
       />
 
-      {/* Right: Note detail */}
+      {/* Right: Note detail (editable) */}
       <Box overflow="auto" p={3}>
-        {!note && topic && (
+        {!noteIdOnly && topic && (
           <Typography variant="body2" color="text.secondary">
             Choose a note from the list.
           </Typography>
         )}
-        {!topic && !note && (
+        {!topic && !noteIdOnly && (
           <Typography variant="body2" color="text.secondary">
             Pick a subject and topic to begin.
           </Typography>
         )}
-        {note && (
-          <>
-            <Typography variant="h6" gutterBottom>{note.title}</Typography>
-            <Typography variant="caption" color="text.secondary" gutterBottom display="block">
-              Subject: {subject?.name} • Topic: {topic?.name}
-            </Typography>
-            <Box mt={2}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
-                {note.markdown}
-              </ReactMarkdown>
-            </Box>
-          </>
-        )}
+        {noteIdOnly && <NoteEditor noteId={noteIdOnly} debounceMs={1000} enableBeforeUnloadGuard />}
       </Box>
     </Box>
   );
-}
-
-function slugify(s: string) {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 }

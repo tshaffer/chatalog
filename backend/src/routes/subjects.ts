@@ -1,30 +1,19 @@
-// server/src/routes/subjects.ts
-import { Router, Request, Response } from 'express';
-import { subjects, topics } from '../data/chatalogData';
+import { Router } from 'express';
+import { listSubjects, getSubjectById } from '../controllers/subjectsController';
+import { listTopicsForSubjectId, listNotesForSubjectTopicIds } from '../controllers/topicsController';
 
-export const subjectsRouter = Router();
+const subjectsRouter = Router();
 
-// GET /api/v1/subjects
-subjectsRouter.get('/', (_req: Request, res: Response) => {
-  res.json(subjects);
-});
+// /api/v1/subjects
+subjectsRouter.get('/', listSubjects);
 
-// GET /api/v1/subjects/slug/:slug
-subjectsRouter.get('/slug/:slug', (req: Request, res: Response) => {
-  const s = subjects.find((x) => x.slug === req.params.slug);
-  if (!s) return res.status(404).json({ error: 'Subject not found' });
-  res.json(s);
-});
+// /api/v1/subjects/:subjectId
+subjectsRouter.get('/:subjectId', getSubjectById);
 
-// GET /api/v1/subjects/:subjectId/topics
-subjectsRouter.get('/:subjectId/topics', (req: Request, res: Response) => {
-  const list = topics.filter((t) => t.subjectId === req.params.subjectId);
-  res.json(list);
-});
+// /api/v1/subjects/:subjectId/topics
+subjectsRouter.get('/:subjectId/topics', listTopicsForSubjectId);
 
-// GET /api/v1/subjects/:subjectId/topics/slug/:slug
-subjectsRouter.get('/:subjectId/topics/slug/:slug', (req: Request, res: Response) => {
-  const t = topics.find((x) => x.subjectId === req.params.subjectId && x.slug === req.params.slug);
-  if (!t) return res.status(404).json({ error: 'Topic not found' });
-  res.json(t);
-});
+// /api/v1/subjects/:subjectId/topics/:topicId/notes   (ID-based previews)
+subjectsRouter.get('/:subjectId/topics/:topicId/notes', listNotesForSubjectTopicIds);
+
+export default subjectsRouter;

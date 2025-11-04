@@ -13,10 +13,8 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import {
-  useGetSubjectsQuery,
-  useGetTopicsBySubjectQuery,
-} from '../features/api/chatalogApi';
+import { useGetSubjectsQuery, useGetTopicsForSubjectQuery } from '../features/subjects/subjectsApi';
+import { Topic } from '@shared/types';
 
 export default function Home() {
   const navigate = useNavigate();
@@ -92,7 +90,7 @@ const SubjectCard = memo(function SubjectCard(props: {
   subjectName: string;
 }) {
   const navigate = useNavigate();
-  const { data: topics = [], isLoading } = useGetTopicsBySubjectQuery(props.subjectId);
+  const { data: topics = [], isLoading } = useGetTopicsForSubjectQuery(props.subjectId);
 
   const chips = topics.slice(0, 3);
 
@@ -113,7 +111,7 @@ const SubjectCard = memo(function SubjectCard(props: {
             </Stack>
           ) : (
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-              {chips.map((t) => (
+              {chips.map((t: Topic) => (
                 <Chip
                   key={t._id}
                   size="small"

@@ -1,21 +1,24 @@
 import { useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { List, ListItemButton, ListSubheader, Typography, Divider } from '@mui/material';
-import {
-  useGetSubjectsQuery,
-  useGetSubjectBySlugQuery,
-  useGetTopicsBySubjectQuery,
-} from '../features/api/chatalogApi';
+import { useGetSubjectsQuery, useGetTopicsForSubjectQuery } from '../features/subjects/subjectsApi';
+import { Topic } from '@shared/types';
 
 export default function Sidebar() {
   const { subjectSlug, topicSlug } = useParams();
   const navigate = useNavigate();
 
+  // All subjects
   const { data: subjects = [], isLoading: sLoading } = useGetSubjectsQuery();
-  const { data: selectedSubject } = useGetSubjectBySlugQuery(subjectSlug ?? '', {
-    skip: !subjectSlug,
-  });
-  const { data: topics = [], isLoading: tLoading } = useGetTopicsBySubjectQuery(
+
+  // Selected subject by slug (client-side)
+  const selectedSubject = useMemo(
+    () => subjects.find((s) => s.slug === subjectSlug),
+    [subjects, subjectSlug]
+  );
+
+  // Topics by subject **ID**
+  const { data: topics = [], isLoading: tLoading } = useGetTopicsForSubjectQuery(
     selectedSubject?._id ?? '',
     { skip: !selectedSubject?._id }
   );
@@ -41,7 +44,7 @@ export default function Sidebar() {
         {selectedSubject && tLoading && (
           <Typography variant="caption" sx={{ px: 2, py: 1 }}>Loading…</Typography>
         )}
-        {topics.map((t) => (
+        {topics.map((t: Topic) => (
           <ListItemButton
             key={t._id}
             selected={t.slug === topicSlug}
