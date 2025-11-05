@@ -1,4 +1,3 @@
-// frontend/src/pages/Home.tsx
 import { memo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
@@ -13,14 +12,20 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
+import { skipToken } from '@reduxjs/toolkit/query';
 import { useGetSubjectsQuery, useGetTopicsForSubjectQuery } from '../features/subjects/subjectsApi';
 import { Topic } from '@shared/types';
+
+// at top of the file
+const slugify = (s: string) =>
+  s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+const safeId = (o: { _id?: string; id?: string } | undefined) => o?._id ?? o?.id ?? '';
+
 
 export default function Home() {
   const navigate = useNavigate();
   const { data: subjects = [], isLoading } = useGetSubjectsQuery();
 
-  // show up to three subjects as “quick links”
   const topSubjects = subjects.slice(0, 3);
 
   return (
@@ -38,6 +43,7 @@ export default function Home() {
           <Button component={Link} to="/s" variant="contained" size="large">
             Open Notes
           </Button>
+          {/* Keep this if you have a seed route; otherwise remove */}
           <Button component={Link} to="/s/development" variant="outlined" size="large">
             Quick demo (Development)
           </Button>
@@ -61,7 +67,7 @@ export default function Home() {
         )}
         {!isLoading &&
           topSubjects.map((s) => (
-            <SubjectCard key={s._id} subjectId={s._id} subjectSlug={s.slug} subjectName={s.name} />
+            <SubjectCard key={safeId(s)} subjectId={safeId(s)} subjectName={s.name} />
           ))}
         {!isLoading && topSubjects.length === 0 && (
           <Typography variant="body2" color="text.secondary">
@@ -80,24 +86,19 @@ export default function Home() {
   );
 }
 
-/**
- * Separate component so we can call a hook per subject (legal hook usage).
- * Avoids nested <a> by using onClick navigate for the card, and Link on chips.
- */
 const SubjectCard = memo(function SubjectCard(props: {
-  subjectId: string;
-  subjectSlug: string;
+  subjectId: string; // now required
   subjectName: string;
 }) {
   const navigate = useNavigate();
   const { data: topics = [], isLoading } = useGetTopicsForSubjectQuery(props.subjectId);
 
   const chips = topics.slice(0, 3);
+  const subjectHref = `/s/${props.subjectId}-${slugify(props.subjectName)}`;
 
   return (
     <Card variant="outlined" sx={{ minWidth: 260, flex: 1 }}>
-      {/* NOT a Link: use onClick navigate to avoid nested <a> */}
-      <CardActionArea onClick={() => navigate(`/s/${props.subjectSlug}`)}>
+      <CardActionArea onClick={() => navigate(subjectHref)}>
         <CardContent>
           <Typography variant="h6" gutterBottom>
             {props.subjectName}
@@ -111,18 +112,21 @@ const SubjectCard = memo(function SubjectCard(props: {
             </Stack>
           ) : (
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-              {chips.map((t: Topic) => (
-                <Chip
-                  key={t._id}
-                  size="small"
-                  label={t.name}
-                  component={Link}
-                  to={`/s/${props.subjectSlug}/t/${t.slug}`}
-                  clickable
-                  onClick={(e) => e.stopPropagation()} // prevent card onClick
-                  sx={{ mr: 0.5, mb: 0.5 }}
-                />
-              ))}
+              {chips.map((t: Topic) => {
+                const chipHref = `/s/${props.subjectId}-${slugify(props.subjectName)}/t/${safeId(t)}-${slugify(t.name)}`;
+                return (
+                  <Chip
+                    key={safeId(t) || t.name}
+                    size="small"
+                    label={t.name}
+                    component={Link}
+                    to={chipHref}
+                    clickable
+                    onClick={(e) => e.stopPropagation()}
+                    sx={{ mr: 0.5, mb: 0.5 }}
+                  />
+                );
+              })}
               {chips.length === 0 && (
                 <Typography variant="caption" color="text.secondary">
                   No topics yet

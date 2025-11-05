@@ -2,6 +2,7 @@
 import { Router, Express, Request, Response } from 'express';
 import notesRouter from './notes';
 import subjectsRouter from './subjects';
+import importsChatworthyRouter from './imports.chatworthy';
 
 export function createRoutes(app: Express) {
   const api = Router();
@@ -14,13 +15,10 @@ export function createRoutes(app: Express) {
   api.use('/notes', notesRouter);
 
   // Subjects + nested Topics + topic-notes list
-  // (subjectsRouter defines:
-  //   GET /subjects
-  //   GET /subjects/:subjectSlug
-  //   GET /subjects/:subjectSlug/topics
-  //   GET /subjects/:subjectSlug/topics/:topicSlug/notes
-  // )
   api.use('/subjects', subjectsRouter);
+
+  // Chatworthy imports
+  api.use('/imports', importsChatworthyRouter);
 
   app.use('/api/v1', api);
 }

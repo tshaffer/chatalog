@@ -1,19 +1,23 @@
-import { Schema, model, Document } from 'mongoose';
+// models/Topic.ts
+import mongoose, { Schema, Document, Types } from 'mongoose';
+import { applyToJSON } from '../db/toJsonPlugin';
 
 export interface TopicDoc extends Document {
-  subjectId: string;  // store Subject._id as string for simplicity
+  _id: Types.ObjectId;
   name: string;
-  slug: string;
+  subjectId?: string;
+  slug?: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
-const TopicSchema = new Schema<TopicDoc>({
-  subjectId: { type: String, required: true, index: true },
-  name: { type: String, required: true },
-  slug: { type: String, required: true, index: true },
-}, { timestamps: true });
+const TopicSchema = new Schema<TopicDoc>(
+  { name: { type: String, required: true, trim: true }, subjectId: { type: String, index: true }, slug: { type: String, index: true } },
+  { timestamps: true }
+);
 
-TopicSchema.index({ subjectId: 1, slug: 1 }, { unique: true });
+TopicSchema.index({ subjectId: 1, name: 1 }, { unique: true });
 
-export const TopicModel = model<TopicDoc>('Topic', TopicSchema);
+applyToJSON(TopicSchema);
+
+export const TopicModel = mongoose.model<TopicDoc>('Topic', TopicSchema);

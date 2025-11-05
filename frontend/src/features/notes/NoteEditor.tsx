@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { skipToken } from '@reduxjs/toolkit/query'; // ← add
 import { useGetNoteQuery, useUpdateNoteMutation } from './notesApi';
 import type { Note } from '@shared/types';
 import {
@@ -11,28 +12,34 @@ import {
   Alert,
 } from '@mui/material';
 
-type Props = { noteId: string; enableBeforeUnloadGuard?: boolean; debounceMs?: number };
+type Props = { noteId?: string; enableBeforeUnloadGuard?: boolean; debounceMs?: number };
 
 export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, debounceMs = 1000 }: Props) {
-  const { data: note, isLoading, isError, error } = useGetNoteQuery(noteId);
+  const { data: note, isLoading, isError, error } = useGetNoteQuery(noteId ? noteId : skipToken);
   const [updateNote, { isLoading: isSaving }] = useUpdateNoteMutation();
+
+  // If somehow rendered without a noteId, show nothing instead of firing requests
+  if (!noteId) {
+    return <Box p={2}><Typography variant="body2" color="text.secondary">No note selected.</Typography></Box>;
+  }
 
   const [title, setTitle] = useState('');
   const [markdown, setMarkdown] = useState('');
   const [dirty, setDirty] = useState(false);
-  const [snack, setSnack] = useState<{ open: boolean; msg: string; sev: 'success'|'error' }>({ open: false, msg: '', sev: 'success' });
+  const [snack, setSnack] = useState<{ open: boolean; msg: string; sev: 'success' | 'error' }>({ open: false, msg: '', sev: 'success' });
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestNoteRef = useRef<Note | undefined>(undefined);
 
   // Load note -> form
+  const noteKey = (note as any)?.id ?? note?._id;   // <-- tolerate either id or _id
   useEffect(() => {
     if (!note) return;
     latestNoteRef.current = note;
     setTitle(note.title ?? '');
     setMarkdown(note.markdown ?? '');
     setDirty(false);
-  }, [note?._id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [noteKey]); // <-- depend on the computed key
 
   // Debounced autosave
   useEffect(() => {

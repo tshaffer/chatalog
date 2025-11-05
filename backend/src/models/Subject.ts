@@ -1,15 +1,20 @@
-import { Schema, model, Document } from 'mongoose';
+// models/Subject.ts
+import mongoose, { Schema, Document, Types } from 'mongoose';
+import { applyToJSON } from '../db/toJsonPlugin';
 
 export interface SubjectDoc extends Document {
+  _id: Types.ObjectId;
   name: string;
-  slug: string;
+  slug?: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
-const SubjectSchema = new Schema<SubjectDoc>({
-  name: { type: String, required: true },
-  slug: { type: String, required: true, unique: true, index: true },
-}, { timestamps: true });
+const SubjectSchema = new Schema<SubjectDoc>(
+  { name: { type: String, required: true, trim: true, unique: true }, slug: { type: String, index: true } },
+  { timestamps: true }
+);
 
-export const SubjectModel = model<SubjectDoc>('Subject', SubjectSchema);
+applyToJSON(SubjectSchema);
+
+export const SubjectModel = mongoose.model<SubjectDoc>('Subject', SubjectSchema);
