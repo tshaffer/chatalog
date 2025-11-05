@@ -14,7 +14,7 @@ const MIN_SIDEBAR = 220;
 const MAX_SIDEBAR = 480;
 const DEFAULT_SIDEBAR = 300;
 
-const safeId = (o: { _id?: string; id?: string } | undefined) => o?.id ?? o?._id ?? '';
+const safeId = (o: {id?: string } | undefined) => o?.id ?? '';
 
 function slugify(s: string) {
   return (s || '')

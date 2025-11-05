@@ -9,7 +9,7 @@ const slugify = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
 const takeObjectId = (slug?: string) => slug?.match(/^[a-f0-9]{24}/i)?.[0];
-const safeId = (o: { _id?: string; id?: string } | undefined) => o?._id ?? o?.id ?? '';
+const safeId = (o: { id?: string } | undefined) => o?.id ?? '';
 
 export default function Sidebar() {
   const { subjectSlug, topicSlug } = useParams();
@@ -21,7 +21,7 @@ export default function Sidebar() {
   // All subjects
   const { data: subjects = [], isLoading: sLoading } = useGetSubjectsQuery();
 
-  // Selected subject by **id** (supports _id or id)
+  // Selected subject by **id**
   const selectedSubject = useMemo(
     () => subjects.find((s) => safeId(s) === subjectIdFromRoute),
     [subjects, subjectIdFromRoute]
@@ -45,9 +45,7 @@ export default function Sidebar() {
               key={id || s.name}
               selected={isSelected}
               onClick={() => {
-                // console for your debugging
                 // eslint-disable-next-line no-console
-                console.log('Navigating to:', href, { id, s });
                 navigate(href);
               }}
             >

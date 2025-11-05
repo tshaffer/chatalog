@@ -2,7 +2,7 @@
 
 // Hierarchy
 export interface Subject {
-  _id: string;
+  id: string;
   name: string;
   slug: string;
   createdAt?: string; // ISO
@@ -10,7 +10,7 @@ export interface Subject {
 }
 
 export interface Topic {
-  _id: string;
+  id: string;
   subjectId: string;
   name: string;
   slug: string;
@@ -20,7 +20,7 @@ export interface Topic {
 
 // Notes (MVP)
 export interface Note {
-  _id: string;
+  id: string;
   subjectId?: string;
   topicId?: string;
 
@@ -43,7 +43,7 @@ export interface Note {
 
 // Lightweight list item for UIs
 export interface NotePreview {
-  _id: string;
+  id: string;
   title: string;
   summary?: string;
   tags: string[];

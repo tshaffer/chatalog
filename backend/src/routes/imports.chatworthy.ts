@@ -9,8 +9,6 @@ import { NoteModel } from '../models/Note';
 import { SubjectModel } from '../models/Subject';
 import { TopicModel } from '../models/Topic';
 import type { NoteDoc } from '../models/Note';
-import type { SubjectDoc } from '../models/Subject';
-import type { TopicDoc } from '../models/Topic';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -21,11 +19,32 @@ function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 }
 
-async function dedupeSlug(base: string): Promise<string> {
-  let slug = base;
+async function dedupeSubjectSlug(base: string): Promise<string> {
+  let slug = base || 'untitled';
   let i = 2;
-  while (await NoteModel.exists({ slug })) {
+  while (await SubjectModel.exists({ slug })) {
     slug = `${base}-${i++}`;
+  }
+  return slug;
+}
+
+async function dedupeTopicSlug(subjectId: string, base: string): Promise<string> {
+  let slug = base || 'untitled';
+  let i = 2;
+  const scope: any = { subjectId, slug };
+  while (await TopicModel.exists(scope)) {
+    slug = `${base}-${i++}`;
+    scope.slug = slug;
+  }
+  return slug;
+}
+async function dedupeNoteSlug(topicId: string | undefined, base: string): Promise<string> {
+  let slug = base || 'untitled';
+  let i = 2;
+  const scope: any = { slug, ...(topicId ? { topicId } : { topicId: '' }) };
+  while (await NoteModel.exists(scope)) {
+    slug = `${base}-${i++}`;
+    scope.slug = slug;
   }
   return slug;
 }
@@ -88,35 +107,38 @@ async function ensureSubjectTopic(
   let topicId: string | undefined;
 
   if (subjectName) {
-    const s: SubjectDoc = await SubjectModel.findOneAndUpdate(
-      { name: subjectName.trim() },
-      { $setOnInsert: { name: subjectName.trim() } },
-      { new: true, upsert: true }
-    )
-      .orFail()
-      .exec();
-    subjectId = s._id.toHexString();
+    const name = subjectName.trim();
+
+    // Find first to know if we need to create (so we can compute a slug)
+    let subj = await SubjectModel.findOne({ name }).exec();
+    if (!subj) {
+      const base = slugify(name);
+      const slug = await dedupeSubjectSlug(base);
+      subj = await SubjectModel.create({ name, slug });
+    }
+    subjectId = subj.id; // string
   }
 
   if (topicName) {
-    const t: TopicDoc = await TopicModel.findOneAndUpdate(
-      { name: topicName.trim(), ...(subjectId ? { subjectId } : {}) },
-      { $setOnInsert: { name: topicName.trim(), subjectId } },
-      { new: true, upsert: true }
-    )
-      .orFail()
-      .exec();
-    topicId = t._id.toHexString();
+    const name = topicName.trim();
+    const sid = subjectId ?? '';
+
+    let topic = await TopicModel.findOne({ name, subjectId: sid }).exec();
+    if (!topic) {
+      const base = slugify(name);
+      const slug = await dedupeTopicSlug(sid, base);
+      topic = await TopicModel.create({ name, subjectId: sid, slug });
+    }
+    topicId = topic.id; // string
   }
 
   return { subjectId, topicId };
 }
-
 async function persistParsedMd(p: ParsedMd): Promise<{ id: string; title: string }> {
-  const baseSlug = slugify(p.title || 'untitled');
-  const slug = await dedupeSlug(baseSlug);
-
   const { subjectId, topicId } = await ensureSubjectTopic(p.subjectName, p.topicName);
+
+  const baseSlug = slugify(p.title || 'untitled');
+  const slug = await dedupeNoteSlug(topicId ?? '', baseSlug);
 
   const doc: NoteDoc = await NoteModel.create({
     subjectId: subjectId ?? '',
@@ -128,10 +150,13 @@ async function persistParsedMd(p: ParsedMd): Promise<{ id: string; title: string
     tags: p.tags,
     links: [],
     backlinks: [],
-    sources: p.provenanceUrl ? [{ type: 'chatworthy', url: p.provenanceUrl }] : [{ type: 'chatworthy' }],
+    sources: p.provenanceUrl
+      ? [{ type: 'chatworthy', url: p.provenanceUrl }]
+      : [{ type: 'chatworthy' }],
   });
 
-  return { id: doc._id.toHexString(), title: doc.title };
+  // Use id consistently (your toJSON plugin and Mongoose virtual both provide it)
+  return { id: doc.id, title: doc.title };
 }
 
 // --- main importers ---

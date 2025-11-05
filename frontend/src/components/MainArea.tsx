@@ -15,7 +15,7 @@ const MIN_LIST = 260;
 const MAX_LIST = 720;
 const DEFAULT_LIST = 420;
 
-const safeId = (o: { _id?: string; id?: string } | undefined) => o?.id ?? o?._id ?? '';
+const safeId = (o: { id?: string } | undefined) => o?.id ?? '';
   
 function slugify(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -87,12 +87,12 @@ if (note && subjectSlug && topicSlug) {
         {hasTopic && (
           <List dense>
             {previews.map((n) => {
-              const nid = safeId(n); // works for id or _id
+              const nid = safeId(n);
               return (
                 <ListItemButton
                   key={nid}
-                  selected={noteIdOnly === nid}                 // ← was n._id
-                  onClick={() => goToNote(nid, n.title)}        // ← was n._id (or your cast)
+                  selected={noteIdOnly === nid}
+                  onClick={() => goToNote(nid, n.title)}
                 >
                   <ListItemText
                     primary={n.title}

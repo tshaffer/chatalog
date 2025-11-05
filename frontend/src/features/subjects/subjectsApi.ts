@@ -2,7 +2,7 @@
 import type { Subject, Topic, NotePreview } from '@shared/types';
 import { chatalogApi as baseApi } from '../api/chatalogApi';
 
-const safeId = (o: { _id?: string; id?: string } | undefined) => o?.id ?? o?._id ?? '';
+const safeId = (o: { id?: string } | undefined) => o?.id ?? '';
 
 export const subjectsApi = baseApi.injectEndpoints({
   endpoints: (build) => ({

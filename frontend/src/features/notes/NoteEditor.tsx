@@ -32,7 +32,7 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
   const latestNoteRef = useRef<Note | undefined>(undefined);
 
   // Load note -> form
-  const noteKey = (note as any)?.id ?? note?._id;   // <-- tolerate either id or _id
+  const noteKey = note?.id;
   useEffect(() => {
     if (!note) return;
     latestNoteRef.current = note;

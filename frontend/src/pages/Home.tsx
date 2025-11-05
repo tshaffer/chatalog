@@ -19,7 +19,7 @@ import { Topic } from '@shared/types';
 // at top of the file
 const slugify = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-const safeId = (o: { _id?: string; id?: string } | undefined) => o?._id ?? o?.id ?? '';
+const safeId = (o: { id?: string } | undefined) => o?.id ?? '';
 
 
 export default function Home() {
