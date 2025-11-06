@@ -16,6 +16,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
+import remarkBreaks from 'remark-breaks';
 
 // ---------------- helpers ----------------
 
@@ -26,8 +27,8 @@ function stripFrontMatter(md: string | undefined): string {
 
 function normalizeTurns(md: string): string {
   const startRE = /(^|\n)\s*:::\s*turns\b[^\n\r]*\r?\n/i;
-  const endRE1  = /(^|\n)\s*:::\s*end[-\s]*turns\b[^\n\r]*\r?\n/i;
-  const endRE2  = /(^|\n)\s*:::\s*(?:\r?\n|$)/i;
+  const endRE1 = /(^|\n)\s*:::\s*end[-\s]*turns\b[^\n\r]*\r?\n/i;
+  const endRE2 = /(^|\n)\s*:::\s*(?:\r?\n|$)/i;
 
   let i = 0;
   let out = '';
@@ -315,7 +316,10 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
       <Box sx={{ flex: 1, overflow: 'auto', p: 1 }}>
         <Typography variant="h5" sx={{ mb: 1 }}>{title || 'Untitled'}</Typography>
 
-        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm, remarkBreaks]}
+          rehypePlugins={[rehypeHighlight]}
+        >
           {previewBody}
         </ReactMarkdown>
       </Box>
