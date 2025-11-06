@@ -26,7 +26,6 @@ function stripFrontMatter(md: string | undefined): string {
   return md.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
 }
 
-// Gather plain text from a node (used for fallback parsing)
 function nodeToString(node: any): string {
   let out = '';
   visit(node, (n: any) => {
@@ -35,15 +34,19 @@ function nodeToString(node: any): string {
   return out.trim();
 }
 
+// Turn \" -> ", \\n -> \n, \\t -> \t, \\r -> \r
+function unescapeEscapes(s: string): string {
+  return s
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t')
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, '\\');
+}
+
 /**
- * Transform:
- * :::turns
- * - "role: user text: "Hello""
- * - "role: assistant text: "Hi""
- * :::
- *
- * → <div class="turns"> with each <li> carrying:
- *   data-turns-item="1" data-role="user|assistant|…" data-turn-text="…"
+ * :::turns ... :::  → <div class="turns"> and each <li> gets:
+ *   data-turns-item, data-role, data-turn-text
  */
 function turnsDirectivePlugin() {
   return (tree: any) => {
@@ -56,7 +59,6 @@ function turnsDirectivePlugin() {
           className: ['turns'],
         };
 
-        // annotate inner list items
         visit(node, 'listItem', (li: any) => {
           const raw = nodeToString(li);
           const m = raw.match(/role:\s*(\w+)\s+text:\s*"([\s\S]*?)"\s*$/i);
@@ -169,7 +171,6 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
   const previewBody = stripFrontMatter(markdown);
 
   const components: Components = {
-    // Style the outer container but DO NOT add another "Transcript" header
     div({ node, ...props }) {
       const className = (props.className ?? '').toString();
       if (className.split(/\s+/).includes('turns')) {
@@ -182,7 +183,6 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
       return <div {...props} />;
     },
 
-    // Replace content of list items that we tagged via hProperties
     li({ node, ...props }) {
       const p: any = props;
       const isTurnsItem = p['data-turns-item'] === '1';
@@ -192,10 +192,19 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
           roleRaw === 'assistant' ? 'Assistant' :
           roleRaw === 'user' ? 'User' :
           roleRaw ? roleRaw[0].toUpperCase() + roleRaw.slice(1) : 'Role';
-        const text = (p['data-turn-text'] as string) || '';
+
+        // Unescape and render the turn text as markdown:
+        const textRaw = (p['data-turn-text'] as string) || '';
+        const textMd = unescapeEscapes(textRaw);
+
         return (
           <li>
-            <strong>{role}:</strong> {text}
+            <strong>{role}:</strong>
+            <div style={{ marginTop: 4 }}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+                {textMd}
+              </ReactMarkdown>
+            </div>
           </li>
         );
       }
