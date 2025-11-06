@@ -18,6 +18,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import remarkBreaks from 'remark-breaks';
 import 'highlight.js/styles/github.css';
+import '../../styles/markdown.css';
 
 // ---------------- helpers ----------------
 
@@ -316,13 +317,16 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
       <Typography variant="subtitle2" color="text.secondary">Preview</Typography>
       <Box sx={{ flex: 1, overflow: 'auto', p: 1 }}>
         <Typography variant="h5" sx={{ mb: 1 }}>{title || 'Untitled'}</Typography>
-
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm, remarkBreaks]}
-          rehypePlugins={[rehypeHighlight]}
-        >
-          {previewBody}
-        </ReactMarkdown>
+        <Box sx={{ flex: 1, overflow: 'auto', p: 1 }}>
+          <div className="markdown-body">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm, remarkBreaks]}
+              rehypePlugins={[rehypeHighlight]}
+            >
+              {previewBody}
+            </ReactMarkdown>
+          </div>
+        </Box>
       </Box>
 
       <Snackbar
