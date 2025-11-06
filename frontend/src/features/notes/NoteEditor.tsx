@@ -19,15 +19,14 @@ import remarkDirective from 'remark-directive';
 import rehypeHighlight from 'rehype-highlight';
 import { visit } from 'unist-util-visit';
 
-// ---------------- helpers ----------------
+// ---------- helpers ----------
 
-// Strip YAML front matter before previewing
 function stripFrontMatter(md: string | undefined): string {
   if (!md) return '';
   return md.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
 }
 
-// Minimal "toString" for mdast nodes so we can read a list item's raw text
+// Gather plain text from a node (used for fallback parsing)
 function nodeToString(node: any): string {
   let out = '';
   visit(node, (n: any) => {
@@ -37,46 +36,47 @@ function nodeToString(node: any): string {
 }
 
 /**
- * remark plugin to transform:
- *
+ * Transform:
  * :::turns
  * - "role: user text: "Hello""
  * - "role: assistant text: "Hi""
  * :::
  *
- * into a normal <div class="turns"> ... </div>, and annotate each list item
- * with parsed role/text. This keeps us within react-markdown’s typed Components.
+ * → <div class="turns"> with each <li> carrying:
+ *   data-turns-item="1" data-role="user|assistant|…" data-turn-text="…"
  */
 function turnsDirectivePlugin() {
   return (tree: any) => {
     visit(tree, (node: any) => {
       if (node.type === 'containerDirective' && node.name === 'turns') {
-        // render as a div with a special class we can detect later
         node.data ||= {};
         node.data.hName = 'div';
-        node.data.hProperties = { ...(node.data.hProperties || {}), className: ['turns'] };
+        node.data.hProperties = {
+          ...(node.data.hProperties || {}),
+          className: ['turns'],
+        };
 
-        // annotate inner list items so we can render "Role: text"
+        // annotate inner list items
         visit(node, 'listItem', (li: any) => {
-          li.data ||= {};
-          li.data.turnsItem = true;
-
           const raw = nodeToString(li);
-          // Try to parse: role: user text: "...."
           const m = raw.match(/role:\s*(\w+)\s+text:\s*"([\s\S]*?)"\s*$/i);
-          if (m) {
-            li.data.role = m[1].toLowerCase();
-            li.data.turnText = m[2];
-          } else {
-            li.data.turnText = raw.replace(/^-\s*/, '');
-          }
+          const role = (m?.[1] || '').toLowerCase();
+          const turnText = m?.[2] || raw.replace(/^-\s*/, '');
+
+          li.data ||= {};
+          li.data.hProperties = {
+            ...(li.data.hProperties || {}),
+            'data-turns-item': '1',
+            'data-role': role || undefined,
+            'data-turn-text': turnText,
+          };
         });
       }
     });
   };
 }
 
-// ---------------- component ----------------
+// ---------- component ----------
 
 type Props = { noteId?: string; enableBeforeUnloadGuard?: boolean; debounceMs?: number };
 
@@ -96,7 +96,6 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestNoteRef = useRef<Note | undefined>(undefined);
 
-  // Load note -> form (use a stable key to avoid infinite loops)
   const noteKey = note?.id;
   useEffect(() => {
     if (!note) return;
@@ -106,11 +105,8 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
     setDirty(false);
   }, [noteKey]);
 
-  // Debounced autosave
   useEffect(() => {
-    if (!note) return;
-    if (!dirty) return;
-
+    if (!note || !dirty) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       try {
@@ -121,11 +117,9 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
         setSnack({ open: true, msg: 'Save failed', sev: 'error' });
       }
     }, debounceMs);
-
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
   }, [dirty, title, markdown, noteId, debounceMs, updateNote, note]);
 
-  // Cmd/Ctrl+S
   useEffect(() => {
     const onKey = async (e: KeyboardEvent) => {
       const isCmdOrCtrl = e.metaKey || e.ctrlKey;
@@ -146,7 +140,6 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
     return () => window.removeEventListener('keydown', onKey);
   }, [note, noteId, title, markdown, updateNote]);
 
-  // Before-unload guard
   useEffect(() => {
     if (!enableBeforeUnloadGuard) return;
     const handler = (e: BeforeUnloadEvent) => {
@@ -175,15 +168,13 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
 
   const previewBody = stripFrontMatter(markdown);
 
-  // Typed, conditional component overrides
   const components: Components = {
-    // If a <div> carries class 'turns', wrap it with a label.
+    // Style the outer container but DO NOT add another "Transcript" header
     div({ node, ...props }) {
       const className = (props.className ?? '').toString();
       if (className.split(/\s+/).includes('turns')) {
         return (
           <Box sx={{ borderLeft: '4px solid', pl: 2, my: 2 }}>
-            <Typography variant="h6" sx={{ mb: 1 }}>Transcript</Typography>
             <div {...props} />
           </Box>
         );
@@ -191,17 +182,19 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
       return <div {...props} />;
     },
 
-    // For list items inside :::turns, we tagged them in data.turnsItem
+    // Replace content of list items that we tagged via hProperties
     li({ node, ...props }) {
-      const data = (node as any).data;
-      if (data?.turnsItem) {
+      const p: any = props;
+      const isTurnsItem = p['data-turns-item'] === '1';
+      if (isTurnsItem) {
+        const roleRaw = (p['data-role'] as string | undefined) || '';
         const role =
-          data.role === 'assistant' ? 'Assistant' :
-          data.role === 'user' ? 'User' :
-          (data.role ? String(data.role) : 'Role');
-        const text = data.turnText ?? '';
+          roleRaw === 'assistant' ? 'Assistant' :
+          roleRaw === 'user' ? 'User' :
+          roleRaw ? roleRaw[0].toUpperCase() + roleRaw.slice(1) : 'Role';
+        const text = (p['data-turn-text'] as string) || '';
         return (
-          <li {...props}>
+          <li>
             <strong>{role}:</strong> {text}
           </li>
         );
@@ -230,7 +223,6 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
         fullWidth
       />
 
-      {/* Editor */}
       <TextField
         label="Markdown"
         value={markdown}
@@ -242,7 +234,6 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
         sx={{ flex: 1, overflow: 'auto' }}
       />
 
-      {/* Live Preview */}
       <Divider />
       <Typography variant="subtitle2" color="text.secondary">Preview</Typography>
       <Box sx={{ flex: 1, overflow: 'auto', p: 1 }}>
