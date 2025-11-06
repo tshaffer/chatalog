@@ -324,30 +324,18 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
     );
   }
 
-  // --- BEGIN TURN PREPROCESSOR SELF-TEST ---
-const testMarkdown = String.raw`:::turns
-- role: user
-  text: "Still testing chatalog rendering. Respond with a short snippet that includes some markdown that will test the escaping mechanism of chatalog."
-- role: assistant
-  text: "Here’s a compact markdown snippet that stresses escaping and directive parsing:\n## Escaping Test\n\n- Literal colons: \`::\`\n- Directive-like but should render as text: :::note *not a block*\n- Inline code with backticks: \`\` \`code\` \`\`\n- Triple backticks inside a fenced block:\n\n\nnginxCopy codenested\n\nyamlCopy code- YAML front matter imitation:\n---\ntitle: \"fake front matter --- inside content\"\n---\n- Markdown link with brackets: [link](https://example.com)\n- Mixed emphasis: **bold _and_ italic**\n\nThis snippet mixes fence nesting, ::: sequences, and front-matter–style separators — all good for testing Chatalog’s preprocessing and escaping logic."
-- role: user
-  text: "Now give me two sentences with small formatting."
-- role: assistant
-  text: "Here’s a compact sample:\nThis is **bold text** with some *italics* and inline \`code\`.\nHere’s a [link](https://example.com) and an emoji 😊 to test inline rendering."
-:::end-turns`;
+  // 1) Verify the raw body (after front matter) actually has :::turns
+  const rawBody = stripFrontMatter(markdown);
+  console.log('[raw has :::turns?]', /:::turns/.test(rawBody), rawBody.slice(0, 240));
 
-const __probe = normalizeTurns(stripFrontMatter(testMarkdown));
-console.log('[turns probe length]', __probe.length);
-console.log('[turns probe contains "fake front matter"]', __probe.includes('fake front matter'));
-console.log('[turns probe tail]', __probe.slice(__probe.indexOf('title:'), __probe.indexOf('title:') + 80));
-// --- END TURN PREPROCESSOR SELF-TEST ---
+  // 2) Verify our preprocessor is applied
+  const previewBody = normalizeTurns(rawBody);
+  console.log('[preview has Prompt/Response counts]', {
+    prompts: (previewBody.match(/\*\*Prompt\*\*/g) || []).length,
+    responses: (previewBody.match(/\*\*Response\*\*/g) || []).length,
+  });
 
-  // >>> Preprocess here
-  // const previewBody = normalizeTurns(stripFrontMatter(markdown));
-  const previewBody = normalizeTurns(stripFrontMatter(testMarkdown));
   console.log('[normalizeTurns OUTPUT]\\n', previewBody);
-
-  // debugger;
 
   return (
     <Box p={2} sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden' }}>
