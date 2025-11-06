@@ -58,9 +58,9 @@ function normalizeTurns(md: string): string {
   const reBlock = /:::turns\s*([\s\S]*?)(?:^\s*:::end-turns\s*$|^\s*:::\s*$|\Z)/gim;
 
   return md.replace(reBlock, (_m, body: string) => {
-    // Extract pairs inside the body
-    // Role on one line, text on the next (quoted); we do not rely on leading "-"
-    const reItem = /role:\s*(\w+)[^\S\r\n]*[\r\n]+[\t ]*text:\s*"([\s\S]*?)"/gi;
+    // NEW: handle escaped quotes inside the quoted text
+    // role: <word> \n text: "<content where \" is allowed>"
+    const reItem = /role:\s*(\w+)[^\S\r\n]*[\r\n]+[\t ]*text:\s*"((?:\\.|[^"\\])*)"/gi;
 
     const out: string[] = [];
     let mm: RegExpExecArray | null;
@@ -75,11 +75,7 @@ function normalizeTurns(md: string): string {
       }
     }
 
-    // If nothing matched, drop the block entirely
-    if (out.length === 0) return '';
-
-    // Add a thin separator after the transcript for readability
-    return out.join('\n').trim() + '\n';
+    return out.length ? out.join('\n').trim() + '\n' : '';
   });
 }
 
@@ -192,7 +188,20 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
   }
 
   // >>> Preprocess here
-  const previewBody = normalizeTurns(stripFrontMatter(markdown));
+  // const previewBody = normalizeTurns(stripFrontMatter(markdown));
+  const testMarkdown = `:::turns
+- role: user
+  text: "Still testing chatalog rendering. Respond with a short snippet that includes some markdown that will test the escaping mechanism of chatalog."
+- role: assistant
+  text: "Here’s a compact markdown snippet that stresses escaping and directive parsing:\n## Escaping Test\n\n- Literal colons: \`::\`\n- Directive-like but should render as text: :::note *not a block*\n- Inline code with backticks: \`\` \`code\` \`\`\n- Triple backticks inside a fenced block:\n\n\nnginxCopy codenested\n\nyamlCopy code- YAML front matter imitation:\n---\ntitle: \"fake front matter --- inside content\"\n---\n- Markdown link with brackets: [link](https://example.com)\n- Mixed emphasis: **bold _and_ italic**\n\nThis snippet mixes fence nesting, ::: sequences, and front-matter–style separators — all good for testing Chatalog’s preprocessing and escaping logic."
+- role: user
+  text: "Now give me two sentences with small formatting."
+- role: assistant
+  text: "Here’s a compact sample:\nThis is **bold text** with some *italics* and inline \`code\`.\nHere’s a [link](https://example.com) and an emoji 😊 to test inline rendering."
+:::end-turns
+`;
+  const previewBody = normalizeTurns(stripFrontMatter(testMarkdown));
+  debugger;
 
   return (
     <Box p={2} sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden' }}>
