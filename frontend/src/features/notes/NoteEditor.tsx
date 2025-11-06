@@ -18,7 +18,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 
 // ---------------- helpers ----------------
-// helpers
+
 function toBlockquote(s: string): string {
   return s.split('\n').map(line => `> ${line}`).join('\n');
 }
@@ -31,7 +31,6 @@ function unescapeEscapes(s: string): string {
     .replace(/\\t/g, '\t');
 }
 
-// DROP-IN
 function normalizeTurns(md: string): string {
   const reBlock = /:::turns\s*([\s\S]*?)(?:^\s*:::end-turns\s*$|^\s*:::\s*$|\Z)/gim;
   return md.replace(reBlock, (_m, body: string) => {
@@ -111,111 +110,10 @@ function matchAt(s: string, i: number, lit: string): boolean {
   return true;
 }
 
-
-
-
-
-
-
-
-
-// --- helpers you likely already have ---
 function stripFrontMatter(md: string | undefined): string {
   if (!md) return '';
   return md.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
 }
-/** Robust parser for YAML-style items:
- *   - role: user
- *     text: "<quoted text possibly with \\n and \\" and newlines>"
- */
-function parseTurnsYaml(block: string): Array<{ role: string; text: string }> {
-  const lines = block.split(/\r?\n/);
-  const turns: Array<{ role: string; text: string }> = [];
-
-  let pendingRole: string | null = null;
-  let collecting = false;
-  let buf = '';
-
-  // helper to finalize a turn when we have both role and text
-  const pushIfReady = () => {
-    if (pendingRole != null) {
-      turns.push({ role: pendingRole, text: unescapeEscapes(buf) });
-    }
-    pendingRole = null;
-    buf = '';
-    collecting = false;
-  };
-
-  // scan line-by-line and read quoted text with escape awareness
-  for (let li = 0; li < lines.length; li++) {
-    const raw = lines[li];
-
-    if (!collecting) {
-      // role: <word>
-      const mRole = raw.match(/^\s*-\s*role:\s*(\w+)\s*$/i) || raw.match(/^\s*role:\s*(\w+)\s*$/i);
-      if (mRole) {
-        pendingRole = mRole[1].toLowerCase();
-        continue;
-      }
-
-      // text: "<start..."
-      const mTextStart = raw.match(/^\s*text:\s*"(.*)$/i);
-      if (mTextStart) {
-        const rest = mTextStart[1];
-        // try to find a closing " in this same line (unescaped)
-        const { consumed, closed } = readQuotedTillClose(rest);
-        buf = consumed;
-        collecting = !closed; // if not closed, keep collecting next lines
-        if (!collecting) {
-          // finished text on same line
-          pushIfReady();
-        }
-        continue;
-      }
-      // ignore other lines inside the block
-    } else {
-      // we are collecting continuation of text, append newline + this line and try to close
-      const { consumed, closed } = readQuotedTillClose('\n' + raw);
-      buf += consumed;
-      if (closed) {
-        pushIfReady();
-      }
-    }
-  }
-
-  // If file ended while collecting, still push
-  if (collecting) pushIfReady();
-
-  return turns;
-}
-
-/** Reads characters until an unescaped closing quote is found.
- * Input starts right after the opening quote; may start with '\n...' when continuing.
- * Returns the consumed content and whether we closed.
- */
-function readQuotedTillClose(s: string): { consumed: string; closed: boolean } {
-  let out = '';
-  let escaped = false;
-  for (let i = 0; i < s.length; i++) {
-    const ch = s[i];
-    if (escaped) {
-      out += ch;
-      escaped = false;
-    } else if (ch === '\\') {
-      escaped = true;
-      // keep the backslash so unescapeEscapes() can handle it
-      out += ch;
-    } else if (ch === '"') {
-      // closing quote reached
-      return { consumed: out, closed: true };
-    } else {
-      out += ch;
-    }
-  }
-  // not closed yet; return everything
-  return { consumed: out, closed: false };
-}
-
 // ---------------- component ----------------
 
 type Props = { noteId?: string; enableBeforeUnloadGuard?: boolean; debounceMs?: number };
@@ -324,30 +222,7 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
     );
   }
 
-  // --- BEGIN TURN PREPROCESSOR SELF-TEST ---
-const testMarkdown = String.raw`:::turns
-- role: user
-  text: "Still testing chatalog rendering. Respond with a short snippet that includes some markdown that will test the escaping mechanism of chatalog."
-- role: assistant
-  text: "Here’s a compact markdown snippet that stresses escaping and directive parsing:\n## Escaping Test\n\n- Literal colons: \`::\`\n- Directive-like but should render as text: :::note *not a block*\n- Inline code with backticks: \`\` \`code\` \`\`\n- Triple backticks inside a fenced block:\n\n\nnginxCopy codenested\n\nyamlCopy code- YAML front matter imitation:\n---\ntitle: \"fake front matter --- inside content\"\n---\n- Markdown link with brackets: [link](https://example.com)\n- Mixed emphasis: **bold _and_ italic**\n\nThis snippet mixes fence nesting, ::: sequences, and front-matter–style separators — all good for testing Chatalog’s preprocessing and escaping logic."
-- role: user
-  text: "Now give me two sentences with small formatting."
-- role: assistant
-  text: "Here’s a compact sample:\nThis is **bold text** with some *italics* and inline \`code\`.\nHere’s a [link](https://example.com) and an emoji 😊 to test inline rendering."
-:::end-turns`;
-
-const __probe = normalizeTurns(stripFrontMatter(testMarkdown));
-console.log('[turns probe length]', __probe.length);
-console.log('[turns probe contains "fake front matter"]', __probe.includes('fake front matter'));
-console.log('[turns probe tail]', __probe.slice(__probe.indexOf('title:'), __probe.indexOf('title:') + 80));
-// --- END TURN PREPROCESSOR SELF-TEST ---
-
-  // >>> Preprocess here
-  // const previewBody = normalizeTurns(stripFrontMatter(markdown));
-  const previewBody = normalizeTurns(stripFrontMatter(testMarkdown));
-  console.log('[normalizeTurns OUTPUT]\\n', previewBody);
-
-  // debugger;
+  const previewBody = normalizeTurns(stripFrontMatter(markdown));
 
   return (
     <Box p={2} sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden' }}>
