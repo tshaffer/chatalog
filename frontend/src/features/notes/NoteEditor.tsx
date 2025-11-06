@@ -40,14 +40,13 @@ function normalizeTurns(md: string): string {
     startRE.lastIndex = i;
     const startMatch = startRE.exec(md);
     if (!startMatch) {
-      // append remainder
       out += md.slice(i);
       break;
     }
 
     const beforeBlock = md.slice(i, startMatch.index);
-    const blockStart = startMatch.index;                  // at first ':' of ':::turns'
-    const bodyStart = startMatch.index + startMatch[0].length; // char after the newline of marker
+    const blockStart = startMatch.index; // at first ':' of ':::turns'
+    const bodyStart = startMatch.index + startMatch[0].length; // char after newline of marker
 
     // find end marker (prefer explicit end-turns)
     endRE1.lastIndex = bodyStart;
@@ -58,10 +57,9 @@ function normalizeTurns(md: string): string {
     const endMatch = end1 || end2;
     const bodyEnd = endMatch ? endMatch.index : md.length;
     const afterMarker = endMatch ? endMatch.index + endMatch[0].length : bodyEnd;
-
     const body = md.slice(bodyStart, bodyEnd);
 
-    // ---- DEBUG: show exact body and first code points
+    // ---- DEBUG
     if (process.env.NODE_ENV === 'development') {
       const head = body.slice(0, 240);
       console.log('[turns body head]', JSON.stringify(head));
@@ -72,19 +70,21 @@ function normalizeTurns(md: string): string {
 
     out += beforeBlock; // keep text before the block
     if (!turns.length) {
-      // PARSE FAILED → keep the original block verbatim so the content doesn't vanish
       console.warn('[turns] parse yielded 0 items; preserving raw block');
       out += md.slice(blockStart, afterMarker);
     } else {
-      // Build replacement markdown
+      // Build replacement markdown with separators between turns
       const rep: string[] = [];
-      for (const t of turns) {
+      turns.forEach((t, idx) => {
+        if (idx > 0) rep.push('\n* * *\n'); // ← separator between turns
+
         if ((t.role || '').toLowerCase() === 'user') {
           rep.push('**Prompt**', '', toBlockquote(t.text), '');
         } else {
           rep.push('**Response**', '', t.text, '');
         }
-      }
+      });
+
       out += '\n' + rep.join('\n').trim() + '\n';
     }
 
