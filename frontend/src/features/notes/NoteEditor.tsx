@@ -60,18 +60,33 @@ function turnsDirectivePlugin() {
   return (tree: any) => {
     visit(tree, (node: any) => {
       if (node.type === 'containerDirective' && node.name === 'turns') {
-        const turns: Turn[] = [];
+        const turns: { role: string; text: string }[] = [];
 
-        // collect items from the directive body
-        visit(node, 'listItem', (li: any) => {
-          const raw = nodeToString(li);
-          const m = raw.match(/role:\s*(\w+)\s+text:\s*"([\s\S]*?)"\s*$/i);
-          const role = (m?.[1] || '').toLowerCase();
-          const text = unescapeEscapes(m?.[2] || raw.replace(/^-\s*/, ''));
-          turns.push({ role, text });
-        });
+        // Capture the literal text of the directive’s content
+        let rawBlock = '';
+        for (const child of node.children || []) {
+          if (child.type === 'list') {
+            for (const item of child.children || []) {
+              rawBlock += nodeToString(item) + '\n';
+            }
+          } else {
+            rawBlock += nodeToString(child) + '\n';
+          }
+        }
 
-        node.children = []; // prevent default list rendering
+        // Split on "- role:" lines
+        const items = rawBlock.split(/^- role:/m).map(s => s.trim()).filter(Boolean);
+        for (const item of items) {
+          // role line is implicit (we removed it by split)
+          const roleMatch = item.match(/^(\w+)/);
+          const role = roleMatch ? roleMatch[1].toLowerCase() : '';
+          const textMatch = item.match(/text:\s*"([\s\S]*?)"$/m);
+          const text = textMatch ? unescapeEscapes(textMatch[1]) : '';
+          if (role || text) turns.push({ role, text });
+        }
+
+        // Remove original list and attach metadata
+        node.children = [];
         node.data ||= {};
         node.data.hName = 'div';
         node.data.hProperties = {
