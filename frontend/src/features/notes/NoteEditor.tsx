@@ -19,7 +19,7 @@ import remarkDirective from 'remark-directive';
 import rehypeHighlight from 'rehype-highlight';
 import { visit } from 'unist-util-visit';
 
-// ---------- helpers ----------
+// ---------------- helpers ----------------
 
 function stripFrontMatter(md: string | undefined): string {
   if (!md) return '';
@@ -34,7 +34,7 @@ function nodeToString(node: any): string {
   return out.trim();
 }
 
-// Turn \" -> ", \\n -> \n, \\t -> \t, \\r -> \r
+// Unescape common sequences from serialized text
 function unescapeEscapes(s: string): string {
   return s
     .replace(/\\n/g, '\n')
@@ -44,41 +44,47 @@ function unescapeEscapes(s: string): string {
     .replace(/\\\\/g, '\\');
 }
 
+type Turn = { role: string; text: string };
+
 /**
- * :::turns ... :::  → <div class="turns"> and each <li> gets:
- *   data-turns-item, data-role, data-turn-text
+ * remark plugin:
+ *   :::turns
+ *   - "role: user text: "...""
+ *   - "role: assistant text: "...""
+ *   :::
+ *
+ * → <div class="turns" data-turns-json='[{"role":"user","text":"..."}]'></div>
+ * We remove list markup so we can render clean, top-level blocks later.
  */
 function turnsDirectivePlugin() {
   return (tree: any) => {
     visit(tree, (node: any) => {
       if (node.type === 'containerDirective' && node.name === 'turns') {
+        const turns: Turn[] = [];
+
+        // collect items from the directive body
+        visit(node, 'listItem', (li: any) => {
+          const raw = nodeToString(li);
+          const m = raw.match(/role:\s*(\w+)\s+text:\s*"([\s\S]*?)"\s*$/i);
+          const role = (m?.[1] || '').toLowerCase();
+          const text = unescapeEscapes(m?.[2] || raw.replace(/^-\s*/, ''));
+          turns.push({ role, text });
+        });
+
+        node.children = []; // prevent default list rendering
         node.data ||= {};
         node.data.hName = 'div';
         node.data.hProperties = {
           ...(node.data.hProperties || {}),
           className: ['turns'],
+          'data-turns-json': JSON.stringify(turns),
         };
-
-        visit(node, 'listItem', (li: any) => {
-          const raw = nodeToString(li);
-          const m = raw.match(/role:\s*(\w+)\s+text:\s*"([\s\S]*?)"\s*$/i);
-          const role = (m?.[1] || '').toLowerCase();
-          const turnText = m?.[2] || raw.replace(/^-\s*/, '');
-
-          li.data ||= {};
-          li.data.hProperties = {
-            ...(li.data.hProperties || {}),
-            'data-turns-item': '1',
-            'data-role': role || undefined,
-            'data-turn-text': turnText,
-          };
-        });
       }
     });
   };
 }
 
-// ---------- component ----------
+// ---------------- component ----------------
 
 type Props = { noteId?: string; enableBeforeUnloadGuard?: boolean; debounceMs?: number };
 
@@ -107,6 +113,7 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
     setDirty(false);
   }, [noteKey]);
 
+  // debounced autosave
   useEffect(() => {
     if (!note || !dirty) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -122,6 +129,7 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
   }, [dirty, title, markdown, noteId, debounceMs, updateNote, note]);
 
+  // Cmd/Ctrl+S
   useEffect(() => {
     const onKey = async (e: KeyboardEvent) => {
       const isCmdOrCtrl = e.metaKey || e.ctrlKey;
@@ -142,6 +150,7 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
     return () => window.removeEventListener('keydown', onKey);
   }, [note, noteId, title, markdown, updateNote]);
 
+  // before-unload guard
   useEffect(() => {
     if (!enableBeforeUnloadGuard) return;
     const handler = (e: BeforeUnloadEvent) => {
@@ -171,44 +180,49 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
   const previewBody = stripFrontMatter(markdown);
 
   const components: Components = {
+    // Render the whole transcript as blocks, not list items
     div({ node, ...props }) {
       const className = (props.className ?? '').toString();
-      if (className.split(/\s+/).includes('turns')) {
-        return (
-          <Box sx={{ borderLeft: '4px solid', pl: 2, my: 2 }}>
-            <div {...props} />
-          </Box>
-        );
+      if (!className.split(/\s+/).includes('turns')) return <div {...props} />;
+
+      const json = (props as any)['data-turns-json'] as string | undefined;
+      let turns: Turn[] = [];
+      try {
+        turns = json ? JSON.parse(json) : [];
+      } catch {
+        // fall through to default wrapper if bad JSON
+        return <div {...props} />;
       }
-      return <div {...props} />;
-    },
 
-    li({ node, ...props }) {
-      const p: any = props;
-      const isTurnsItem = p['data-turns-item'] === '1';
-      if (isTurnsItem) {
-        const roleRaw = (p['data-role'] as string | undefined) || '';
-        const role =
-          roleRaw === 'assistant' ? 'Assistant' :
-          roleRaw === 'user' ? 'User' :
-          roleRaw ? roleRaw[0].toUpperCase() + roleRaw.slice(1) : 'Role';
-
-        // Unescape and render the turn text as markdown:
-        const textRaw = (p['data-turn-text'] as string) || '';
-        const textMd = unescapeEscapes(textRaw);
-
-        return (
-          <li>
-            <strong>{role}:</strong>
-            <div style={{ marginTop: 4 }}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
-                {textMd}
-              </ReactMarkdown>
-            </div>
-          </li>
-        );
-      }
-      return <li {...props} />;
+      // Render Prompt (as blockquote) and Response (full markdown at root)
+      return (
+        <Box sx={{ my: 2 }}>
+          {turns.map((t, i) => {
+            const role = t.role.toLowerCase();
+            if (role === 'user') {
+              return (
+                <Box key={i} sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Prompt</Typography>
+                  <blockquote style={{ margin: 0 }}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+                      {t.text}
+                    </ReactMarkdown>
+                  </blockquote>
+                </Box>
+              );
+            }
+            // assistant or anything else → render as pure root-level markdown
+            return (
+              <Box key={i} sx={{ my: 2 }}>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>Response</Typography>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+                  {t.text}
+                </ReactMarkdown>
+              </Box>
+            );
+          })}
+        </Box>
+      );
     },
   };
 
@@ -232,6 +246,7 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
         fullWidth
       />
 
+      {/* Editor */}
       <TextField
         label="Markdown"
         value={markdown}
@@ -243,6 +258,7 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
         sx={{ flex: 1, overflow: 'auto' }}
       />
 
+      {/* Live Preview */}
       <Divider />
       <Typography variant="subtitle2" color="text.secondary">Preview</Typography>
       <Box sx={{ flex: 1, overflow: 'auto', p: 1 }}>
@@ -268,3 +284,4 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
     </Box>
   );
 }
+``
