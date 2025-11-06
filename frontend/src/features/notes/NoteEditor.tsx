@@ -19,51 +19,38 @@ import rehypeHighlight from 'rehype-highlight';
 
 // ---------------- helpers ----------------
 
+
+// --- helpers you likely already have ---
 function stripFrontMatter(md: string | undefined): string {
   if (!md) return '';
   return md.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
 }
-
-// Unescape common sequences coming from serialized text
+function toBlockquote(s: string): string {
+  return s.split('\n').map(line => `> ${line}`).join('\n');
+}
 function unescapeEscapes(s: string): string {
   return s
-    .replace(/\\\\/g, '\\')  // \\  -> \
-    .replace(/\\"/g, '"')     // \"  -> "
-    .replace(/\\n/g, '\n')    // \n  -> newline
+    .replace(/\\\\/g, '\\')  // \\ -> \
+    .replace(/\\"/g, '"')    // \" -> "
+    .replace(/\\n/g, '\n')   // \n -> newline
     .replace(/\\r/g, '\r')
     .replace(/\\t/g, '\t');
 }
 
-// Turn a multi-line string into a Markdown blockquote
-function toBlockquote(s: string): string {
-  return s
-    .split('\n')
-    .map(line => `> ${line}`)
-    .join('\n');
-}
+// --- DROP-IN PREPROCESSOR ---
+type Turn = { role: string; text: string };
 
-/**
- * Replace every :::turns ... ::: (or :::end-turns) block with plain Markdown.
- * Supports YAML-style items:
- *
- * :::turns
- * - role: user
- *   text: "Prompt..."
- * - role: assistant
- *   text: "Markdown with \\n, lists, headings, etc."
- * :::end-turns
- */
-function normalizeTurns(md: string): string {
-  // Find each turns block
+export function normalizeTurns(md: string): string {
+  // Find each :::turns block (supports :::end-turns OR bare ::: as terminator)
   const reBlock = /:::turns\s*([\s\S]*?)(?:^\s*:::end-turns\s*$|^\s*:::\s*$|\Z)/gim;
 
   return md.replace(reBlock, (_m, body: string) => {
-    const turns = parseTurnsYaml(body);
+    const turns = scanYamlTurns(body);
     if (!turns.length) return '';
 
     const out: string[] = [];
     for (const t of turns) {
-      if (t.role === 'user') {
+      if (t.role.toLowerCase() === 'user') {
         out.push('**Prompt**', '', toBlockquote(t.text), '');
       } else {
         out.push('**Response**', '', t.text, '');
@@ -71,6 +58,89 @@ function normalizeTurns(md: string): string {
     }
     return out.join('\n').trim() + '\n';
   });
+}
+
+// Parse YAML-ish pairs robustly: handles escaped quotes and real newlines inside text
+function scanYamlTurns(block: string): Turn[] {
+  const s = block;
+  const len = s.length;
+  let i = 0;
+
+  const turns: Turn[] = [];
+  let role: string | null = null;
+
+  const isWord = (c: string) => /[A-Za-z0-9_-]/.test(c);
+
+  while (i < len) {
+    // whitespace
+    while (i < len && /\s/.test(s[i])) i++;
+
+    // optional leading dash for list items
+    if (s[i] === '-') { i++; while (i < len && /\s/.test(s[i])) i++; }
+
+    // role: <word>
+    if (matchAt(s, i, 'role:')) {
+      i += 5; // advance past "role:"
+      while (i < len && /\s/.test(s[i])) i++;
+      const start = i;
+      while (i < len && isWord(s[i])) i++;
+      role = s.slice(start, i).toLowerCase();
+      continue;
+    }
+
+    // text: "<quoted…>"
+    if (matchAt(s, i, 'text:')) {
+      i += 5; // past "text:"
+      while (i < len && /\s/.test(s[i])) i++;
+      if (s[i] !== '"') {
+        // malformed; skip to EOL
+        while (i < len && s[i] !== '\n') i++;
+        continue;
+      }
+      i++; // skip opening quote
+
+      // scan until an **unescaped** closing "
+      let buf = '';
+      let escaped = false;
+      for (; i < len; i++) {
+        const ch = s[i];
+        if (escaped) {
+          buf += ch;
+          escaped = false;
+        } else if (ch === '\\') {
+          buf += ch;    // keep the backslash; unescape later
+          escaped = true;
+        } else if (ch === '"') {
+          i++;          // consume closing "
+          break;
+        } else {
+          buf += ch;
+        }
+      }
+
+      const text = unescapeEscapes(buf);
+      if (role == null || role === '') {
+        turns.push({ role: 'assistant', text });
+      } else {
+        turns.push({ role, text });
+        role = null; // reset for next item
+      }
+      continue;
+    }
+
+    // otherwise skip to next line
+    while (i < len && s[i] !== '\n') i++;
+    if (i < len && s[i] === '\n') i++;
+  }
+
+  return turns;
+}
+
+function matchAt(s: string, i: number, lit: string): boolean {
+  for (let k = 0; k < lit.length; k++) {
+    if (s[i + k] !== lit[k]) return false;
+  }
+  return true;
 }
 
 /** Robust parser for YAML-style items:
@@ -287,7 +357,9 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
 :::end-turns
 `;
   const previewBody = normalizeTurns(stripFrontMatter(testMarkdown));
-  debugger;
+  console.log('[normalizeTurns OUTPUT]\\n', previewBody);
+
+  // debugger;
 
   return (
     <Box p={2} sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden' }}>
