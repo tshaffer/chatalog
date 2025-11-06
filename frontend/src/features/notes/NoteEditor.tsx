@@ -18,39 +18,28 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 
 // ---------------- helpers ----------------
-
-
-// --- helpers you likely already have ---
-function stripFrontMatter(md: string | undefined): string {
-  if (!md) return '';
-  return md.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
-}
+// helpers
 function toBlockquote(s: string): string {
   return s.split('\n').map(line => `> ${line}`).join('\n');
 }
 function unescapeEscapes(s: string): string {
   return s
-    .replace(/\\\\/g, '\\')  // \\ -> \
-    .replace(/\\"/g, '"')    // \" -> "
-    .replace(/\\n/g, '\n')   // \n -> newline
+    .replace(/\\\\/g, '\\')
+    .replace(/\\"/g, '"')
+    .replace(/\\n/g, '\n')
     .replace(/\\r/g, '\r')
     .replace(/\\t/g, '\t');
 }
 
-// --- DROP-IN PREPROCESSOR ---
-type Turn = { role: string; text: string };
-
-export function normalizeTurns(md: string): string {
-  // Find each :::turns block (supports :::end-turns OR bare ::: as terminator)
+// DROP-IN
+function normalizeTurns(md: string): string {
   const reBlock = /:::turns\s*([\s\S]*?)(?:^\s*:::end-turns\s*$|^\s*:::\s*$|\Z)/gim;
-
   return md.replace(reBlock, (_m, body: string) => {
     const turns = scanYamlTurns(body);
     if (!turns.length) return '';
-
     const out: string[] = [];
     for (const t of turns) {
-      if (t.role.toLowerCase() === 'user') {
+      if ((t.role || '').toLowerCase() === 'user') {
         out.push('**Prompt**', '', toBlockquote(t.text), '');
       } else {
         out.push('**Response**', '', t.text, '');
@@ -60,27 +49,23 @@ export function normalizeTurns(md: string): string {
   });
 }
 
-// Parse YAML-ish pairs robustly: handles escaped quotes and real newlines inside text
+type Turn = { role: string; text: string };
+
 function scanYamlTurns(block: string): Turn[] {
   const s = block;
   const len = s.length;
   let i = 0;
-
   const turns: Turn[] = [];
   let role: string | null = null;
 
   const isWord = (c: string) => /[A-Za-z0-9_-]/.test(c);
 
   while (i < len) {
-    // whitespace
     while (i < len && /\s/.test(s[i])) i++;
-
-    // optional leading dash for list items
     if (s[i] === '-') { i++; while (i < len && /\s/.test(s[i])) i++; }
 
-    // role: <word>
     if (matchAt(s, i, 'role:')) {
-      i += 5; // advance past "role:"
+      i += 5;
       while (i < len && /\s/.test(s[i])) i++;
       const start = i;
       while (i < len && isWord(s[i])) i++;
@@ -88,34 +73,20 @@ function scanYamlTurns(block: string): Turn[] {
       continue;
     }
 
-    // text: "<quoted…>"
     if (matchAt(s, i, 'text:')) {
-      i += 5; // past "text:"
+      i += 5;
       while (i < len && /\s/.test(s[i])) i++;
-      if (s[i] !== '"') {
-        // malformed; skip to EOL
-        while (i < len && s[i] !== '\n') i++;
-        continue;
-      }
-      i++; // skip opening quote
+      if (s[i] !== '"') { while (i < len && s[i] !== '\n') i++; continue; }
+      i++; // opening "
 
-      // scan until an **unescaped** closing "
       let buf = '';
       let escaped = false;
       for (; i < len; i++) {
         const ch = s[i];
-        if (escaped) {
-          buf += ch;
-          escaped = false;
-        } else if (ch === '\\') {
-          buf += ch;    // keep the backslash; unescape later
-          escaped = true;
-        } else if (ch === '"') {
-          i++;          // consume closing "
-          break;
-        } else {
-          buf += ch;
-        }
+        if (escaped) { buf += ch; escaped = false; }
+        else if (ch === '\\') { buf += ch; escaped = true; }
+        else if (ch === '"') { i++; break; }
+        else { buf += ch; }
       }
 
       const text = unescapeEscapes(buf);
@@ -123,12 +94,11 @@ function scanYamlTurns(block: string): Turn[] {
         turns.push({ role: 'assistant', text });
       } else {
         turns.push({ role, text });
-        role = null; // reset for next item
+        role = null;
       }
       continue;
     }
 
-    // otherwise skip to next line
     while (i < len && s[i] !== '\n') i++;
     if (i < len && s[i] === '\n') i++;
   }
@@ -137,12 +107,23 @@ function scanYamlTurns(block: string): Turn[] {
 }
 
 function matchAt(s: string, i: number, lit: string): boolean {
-  for (let k = 0; k < lit.length; k++) {
-    if (s[i + k] !== lit[k]) return false;
-  }
+  for (let k = 0; k < lit.length; k++) if (s[i + k] !== lit[k]) return false;
   return true;
 }
 
+
+
+
+
+
+
+
+
+// --- helpers you likely already have ---
+function stripFrontMatter(md: string | undefined): string {
+  if (!md) return '';
+  return md.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
+}
 /** Robust parser for YAML-style items:
  *   - role: user
  *     text: "<quoted text possibly with \\n and \\" and newlines>"
@@ -343,9 +324,8 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
     );
   }
 
-  // >>> Preprocess here
-  // const previewBody = normalizeTurns(stripFrontMatter(markdown));
-  const testMarkdown = `:::turns
+  // --- BEGIN TURN PREPROCESSOR SELF-TEST ---
+const testMarkdown = String.raw`:::turns
 - role: user
   text: "Still testing chatalog rendering. Respond with a short snippet that includes some markdown that will test the escaping mechanism of chatalog."
 - role: assistant
@@ -354,8 +334,16 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
   text: "Now give me two sentences with small formatting."
 - role: assistant
   text: "Here’s a compact sample:\nThis is **bold text** with some *italics* and inline \`code\`.\nHere’s a [link](https://example.com) and an emoji 😊 to test inline rendering."
-:::end-turns
-`;
+:::end-turns`;
+
+const __probe = normalizeTurns(stripFrontMatter(testMarkdown));
+console.log('[turns probe length]', __probe.length);
+console.log('[turns probe contains "fake front matter"]', __probe.includes('fake front matter'));
+console.log('[turns probe tail]', __probe.slice(__probe.indexOf('title:'), __probe.indexOf('title:') + 80));
+// --- END TURN PREPROCESSOR SELF-TEST ---
+
+  // >>> Preprocess here
+  // const previewBody = normalizeTurns(stripFrontMatter(markdown));
   const previewBody = normalizeTurns(stripFrontMatter(testMarkdown));
   console.log('[normalizeTurns OUTPUT]\\n', previewBody);
 
