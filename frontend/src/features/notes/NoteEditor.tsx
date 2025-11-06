@@ -59,42 +59,35 @@ type Turn = { role: string; text: string };
 function turnsDirectivePlugin() {
   return (tree: any) => {
     visit(tree, (node: any) => {
-      if (node.type === 'containerDirective' && node.name === 'turns') {
-        const turns: { role: string; text: string }[] = [];
+      if (node.type !== 'containerDirective' || node.name !== 'turns') return;
 
-        // Capture the literal text of the directive’s content
-        let rawBlock = '';
-        for (const child of node.children || []) {
-          if (child.type === 'list') {
-            for (const item of child.children || []) {
-              rawBlock += nodeToString(item) + '\n';
-            }
-          } else {
-            rawBlock += nodeToString(child) + '\n';
-          }
-        }
+      // Get all plain text inside the :::turns block (paragraphs joined with \n)
+      const raw = nodeToString({ type: 'root', children: node.children ?? [] });
 
-        // Split on "- role:" lines
-        const items = rawBlock.split(/^- role:/m).map(s => s.trim()).filter(Boolean);
-        for (const item of items) {
-          // role line is implicit (we removed it by split)
-          const roleMatch = item.match(/^(\w+)/);
-          const role = roleMatch ? roleMatch[1].toLowerCase() : '';
-          const textMatch = item.match(/text:\s*"([\s\S]*?)"$/m);
-          const text = textMatch ? unescapeEscapes(textMatch[1]) : '';
-          if (role || text) turns.push({ role, text });
-        }
+      // Remove any trailing ":::end-turns" or stray ::: markers
+      const cleaned = raw.replace(/^\s*:::end-turns\s*$/m, '').replace(/^\s*:::\s*$/m, '');
 
-        // Remove original list and attach metadata
-        node.children = [];
-        node.data ||= {};
-        node.data.hName = 'div';
-        node.data.hProperties = {
-          ...(node.data.hProperties || {}),
-          className: ['turns'],
-          'data-turns-json': JSON.stringify(turns),
-        };
+      // Find repeated pairs: role: <word>  ...  text: "<...>"
+      // Note: we do NOT require a leading "-" and we allow anything in between.
+      const re = /role:\s*(\w+)[^\S\r\n]*[\r\n]+[\t ]*text:\s*"([\s\S]*?)"/gi;
+
+      const turns: { role: string; text: string }[] = [];
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(cleaned)) !== null) {
+        const role = (m[1] || '').toLowerCase();
+        const text = unescapeEscapes(m[2] || '');
+        turns.push({ role, text });
       }
+
+      // Replace original children with wrapper carrying serialized turns
+      node.children = []; // prevent default list rendering
+      node.data ||= {};
+      node.data.hName = 'div';
+      node.data.hProperties = {
+        ...(node.data.hProperties || {}),
+        className: ['turns'],
+        'data-turns-json': JSON.stringify(turns),
+      };
     });
   };
 }
