@@ -58,25 +58,111 @@ function normalizeTurns(md: string): string {
   const reBlock = /:::turns\s*([\s\S]*?)(?:^\s*:::end-turns\s*$|^\s*:::\s*$|\Z)/gim;
 
   return md.replace(reBlock, (_m, body: string) => {
-    // NEW: handle escaped quotes inside the quoted text
-    // role: <word> \n text: "<content where \" is allowed>"
-    const reItem = /role:\s*(\w+)[^\S\r\n]*[\r\n]+[\t ]*text:\s*"((?:\\.|[^"\\])*)"/gi;
+    const turns = parseTurnsYaml(body);
+    if (!turns.length) return '';
 
     const out: string[] = [];
-    let mm: RegExpExecArray | null;
-    while ((mm = reItem.exec(body)) !== null) {
-      const role = (mm[1] || '').toLowerCase();
-      const text = unescapeEscapes(mm[2] || '');
-
-      if (role === 'user') {
-        out.push('**Prompt**', '', toBlockquote(text), '');
+    for (const t of turns) {
+      if (t.role === 'user') {
+        out.push('**Prompt**', '', toBlockquote(t.text), '');
       } else {
-        out.push('**Response**', '', text, '');
+        out.push('**Response**', '', t.text, '');
       }
     }
-
-    return out.length ? out.join('\n').trim() + '\n' : '';
+    return out.join('\n').trim() + '\n';
   });
+}
+
+/** Robust parser for YAML-style items:
+ *   - role: user
+ *     text: "<quoted text possibly with \\n and \\" and newlines>"
+ */
+function parseTurnsYaml(block: string): Array<{ role: string; text: string }> {
+  const lines = block.split(/\r?\n/);
+  const turns: Array<{ role: string; text: string }> = [];
+
+  let pendingRole: string | null = null;
+  let collecting = false;
+  let buf = '';
+
+  // helper to finalize a turn when we have both role and text
+  const pushIfReady = () => {
+    if (pendingRole != null) {
+      turns.push({ role: pendingRole, text: unescapeEscapes(buf) });
+    }
+    pendingRole = null;
+    buf = '';
+    collecting = false;
+  };
+
+  // scan line-by-line and read quoted text with escape awareness
+  for (let li = 0; li < lines.length; li++) {
+    const raw = lines[li];
+
+    if (!collecting) {
+      // role: <word>
+      const mRole = raw.match(/^\s*-\s*role:\s*(\w+)\s*$/i) || raw.match(/^\s*role:\s*(\w+)\s*$/i);
+      if (mRole) {
+        pendingRole = mRole[1].toLowerCase();
+        continue;
+      }
+
+      // text: "<start..."
+      const mTextStart = raw.match(/^\s*text:\s*"(.*)$/i);
+      if (mTextStart) {
+        const rest = mTextStart[1];
+        // try to find a closing " in this same line (unescaped)
+        const { consumed, closed } = readQuotedTillClose(rest);
+        buf = consumed;
+        collecting = !closed; // if not closed, keep collecting next lines
+        if (!collecting) {
+          // finished text on same line
+          pushIfReady();
+        }
+        continue;
+      }
+      // ignore other lines inside the block
+    } else {
+      // we are collecting continuation of text, append newline + this line and try to close
+      const { consumed, closed } = readQuotedTillClose('\n' + raw);
+      buf += consumed;
+      if (closed) {
+        pushIfReady();
+      }
+    }
+  }
+
+  // If file ended while collecting, still push
+  if (collecting) pushIfReady();
+
+  return turns;
+}
+
+/** Reads characters until an unescaped closing quote is found.
+ * Input starts right after the opening quote; may start with '\n...' when continuing.
+ * Returns the consumed content and whether we closed.
+ */
+function readQuotedTillClose(s: string): { consumed: string; closed: boolean } {
+  let out = '';
+  let escaped = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (escaped) {
+      out += ch;
+      escaped = false;
+    } else if (ch === '\\') {
+      escaped = true;
+      // keep the backslash so unescapeEscapes() can handle it
+      out += ch;
+    } else if (ch === '"') {
+      // closing quote reached
+      return { consumed: out, closed: true };
+    } else {
+      out += ch;
+    }
+  }
+  // not closed yet; return everything
+  return { consumed: out, closed: false };
 }
 
 // ---------------- component ----------------
