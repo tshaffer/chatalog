@@ -31,27 +31,75 @@ function unescapeEscapes(s: string): string {
     .replace(/\\t/g, '\t');
 }
 
-// DROP-IN
-function normalizeTurns(md: string): string {
-  // More permissive block matcher:
-  // - works with CRLF and optional leading spaces before end markers
-  // - supports: ":::end-turns" OR a bare ":::"
-  const reBlock =
-    /:::turns\s*([\s\S]*?)(?=\r?\n\s*:::end-turns\s*(?:\r?\n|$)|\r?\n\s*:::\s*(?:\r?\n|$)|$)/gi;
+function stripFrontMatter(md: string | undefined): string {
+  if (!md) return '';
+  // tolerate BOM, require --- at very start of file (after optional BOM), close on a line with exactly ---
+  return md.replace(/^\uFEFF?---\s*\r?\n[\s\S]*?\r?\n---\s*(?:\r?\n|$)/, '');
+}
 
-  return md.replace(reBlock, (_m, body: string) => {
+function normalizeTurns(md: string): string {
+  const startRE = /(^|\n)\s*:::\s*turns\b[^\n\r]*\r?\n/i;
+  const endRE1 = /(^|\n)\s*:::\s*end[-\s]*turns\b[^\n\r]*\r?\n/i;
+  const endRE2 = /(^|\n)\s*:::\s*(?:\r?\n|$)/i;
+
+  let i = 0;
+  let out = '';
+
+  while (i < md.length) {
+    // find start marker
+    startRE.lastIndex = i;
+    const startMatch = startRE.exec(md);
+    if (!startMatch) {
+      out += md.slice(i);
+      break;
+    }
+
+    const blockStart = startMatch.index + startMatch[0].length; // start of body after marker
+    out += md.slice(i, startMatch.index); // keep text up to :::turns
+
+    // find end marker (prefer explicit end-turns, else bare :::)
+    endRE1.lastIndex = blockStart;
+    endRE2.lastIndex = blockStart;
+    const end1 = endRE1.exec(md);
+    const end2 = endRE2.exec(md);
+
+    let endMatch = end1 || end2;
+    let blockEndBody: number;
+    let blockEndAfterMarker: number;
+
+    if (endMatch) {
+      blockEndBody = endMatch.index;              // end of body (start of end marker)
+      blockEndAfterMarker = endMatch.index + endMatch[0].length; // after end marker line
+    } else {
+      // no terminator; consume to end of doc
+      blockEndBody = md.length;
+      blockEndAfterMarker = md.length;
+    }
+
+    const body = md.slice(blockStart, blockEndBody);
     const turns = scanYamlTurns(body);
-    if (!turns.length) return '';
-    const out: string[] = [];
+
+    if (turns.length === 0) {
+      // nothing parsed; drop the block (or keep as-is; your choice)
+      // Here we’ll drop to avoid showing raw YAML.
+      i = blockEndAfterMarker;
+      continue;
+    }
+
+    // Build replacement markdown
+    const rep: string[] = [];
     for (const t of turns) {
       if ((t.role || '').toLowerCase() === 'user') {
-        out.push('**Prompt**', '', toBlockquote(t.text), '');
+        rep.push('**Prompt**', '', toBlockquote(t.text), '');
       } else {
-        out.push('**Response**', '', t.text, '');
+        rep.push('**Response**', '', t.text, '');
       }
     }
-    return out.join('\n').trim() + '\n';
-  });
+    out += '\n' + rep.join('\n').trim() + '\n';
+    i = blockEndAfterMarker;
+  }
+
+  return out;
 }
 
 type Turn = { role: string; text: string };
@@ -114,20 +162,6 @@ function scanYamlTurns(block: string): Turn[] {
 function matchAt(s: string, i: number, lit: string): boolean {
   for (let k = 0; k < lit.length; k++) if (s[i + k] !== lit[k]) return false;
   return true;
-}
-
-
-
-
-
-
-
-
-
-// --- helpers you likely already have ---
-function stripFrontMatter(md: string | undefined): string {
-  if (!md) return '';
-  return md.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
 }
 
 // ---------------- component ----------------
@@ -238,16 +272,21 @@ export default function NoteEditor({ noteId, enableBeforeUnloadGuard = true, deb
     );
   }
 
-  // 1) Verify the raw body (after front matter) actually has :::turns
-  const rawBody = stripFrontMatter(markdown);
-  console.log('[raw has :::turns?]', /:::turns/.test(rawBody), rawBody.slice(0, 240));
-
-  // 2) Verify our preprocessor is applied
-  const previewBody = normalizeTurns(rawBody);
-  console.log('[preview has Prompt/Response counts]', {
+  const body = stripFrontMatter(markdown ?? '');
+  console.log('[has :::turns (manual)]', /:::\s*turns/i.test(body));
+  const previewBody = normalizeTurns(body);
+  console.log('[counts]', {
     prompts: (previewBody.match(/\*\*Prompt\*\*/g) || []).length,
     responses: (previewBody.match(/\*\*Response\*\*/g) || []).length,
   });
+
+  // const rawBody = stripFrontMatter(markdown);
+  // console.log('[has :::turns (manual)]', /:::\s*turns/i.test(rawBody));
+  // const previewBody = normalizeTurns(rawBody);
+  // console.log('[counts]', {
+  //   prompts: (previewBody.match(/\*\*Prompt\*\*/g) || []).length,
+  //   responses: (previewBody.match(/\*\*Response\*\*/g) || []).length,
+  // });
 
   console.log('[normalizeTurns OUTPUT]\\n', previewBody);
 
