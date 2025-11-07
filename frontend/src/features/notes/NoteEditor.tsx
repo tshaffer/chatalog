@@ -27,10 +27,39 @@ function stripFrontMatter(md: string | undefined): string {
   return md.replace(/^\uFEFF?---\s*\r?\n[\s\S]*?\r?\n---\s*(?:\r?\n|$)/, '');
 }
 
+// Promotes the first non-empty line to an H1 if it looks like a title.
+// Heuristics: starts with an emoji, or contains "itinerary/plan/overview/guide",
+// or the next non-empty line looks like a section/list header.
+function promoteLikelyTitle(md: string): string {
+  const lines = md.split(/\r?\n/);
+  let i = 0;
+  while (i < lines.length && lines[i].trim() === '') i++;
+  if (i >= lines.length) return md;
+
+  const first = lines[i];
+  if (/^\s*#/.test(first)) return md; // already a heading
+
+  // emoji start (covers flags, common emoji)
+  const emojiStart = /^[\p{Extended_Pictographic}]/u.test(first);
+  const looksTitley = /itinerary|plan|overview|guide/i.test(first);
+
+  // peek at next non-empty line for section-y cues
+  let j = i + 1;
+  while (j < lines.length && lines[j].trim() === '') j++;
+  const next = lines[j] ?? '';
+  const nextLooksSection = /^(Day\s*\d|[-*]\s|##\s|###\s)/i.test(next);
+
+  if (emojiStart || looksTitley || nextLooksSection) {
+    lines[i] = '# ' + first.trim();
+    return lines.join('\n');
+  }
+  return md;
+}
+
 function normalizeTurns(md: string): string {
   const startRE = /(^|\n)\s*:::\s*turns\b[^\n\r]*\r?\n/i;
-  const endRE1 = /(^|\n)\s*:::\s*end[-\s]*turns\b[^\n\r]*\r?\n/i;
-  const endRE2 = /(^|\n)\s*:::\s*(?:\r?\n|$)/i;
+  const endRE1  = /(^|\n)\s*:::\s*end[-\s]*turns\b[^\n\r]*\r?\n/i;
+  const endRE2  = /(^|\n)\s*:::\s*(?:\r?\n|$)/i;
 
   let i = 0;
   let out = '';
@@ -45,8 +74,8 @@ function normalizeTurns(md: string): string {
     }
 
     const beforeBlock = md.slice(i, startMatch.index);
-    const blockStart = startMatch.index; // at first ':' of ':::turns'
-    const bodyStart = startMatch.index + startMatch[0].length; // char after newline of marker
+    const blockStart  = startMatch.index;                 // at first ':' of ':::turns'
+    const bodyStart   = startMatch.index + startMatch[0].length; // after marker newline
 
     // find end marker (prefer explicit end-turns)
     endRE1.lastIndex = bodyStart;
@@ -54,9 +83,10 @@ function normalizeTurns(md: string): string {
     const end1 = endRE1.exec(md);
     const end2 = endRE2.exec(md);
 
-    const endMatch = end1 || end2;
-    const bodyEnd = endMatch ? endMatch.index : md.length;
+    const endMatch    = end1 || end2;
+    const bodyEnd     = endMatch ? endMatch.index : md.length;
     const afterMarker = endMatch ? endMatch.index + endMatch[0].length : bodyEnd;
+
     const body = md.slice(bodyStart, bodyEnd);
 
     // ---- DEBUG
@@ -76,12 +106,14 @@ function normalizeTurns(md: string): string {
       // Build replacement markdown with separators between turns
       const rep: string[] = [];
       turns.forEach((t, idx) => {
-        if (idx > 0) rep.push('\n* * *\n'); // ← separator between turns
+        if (idx > 0) rep.push('\n* * *\n'); // separator between turns
 
         if ((t.role || '').toLowerCase() === 'user') {
           rep.push('**Prompt**', '', toBlockquote(t.text), '');
         } else {
-          rep.push('**Response**', '', t.text, '');
+          // Assistant → promote a likely title on the first non-empty line
+          const rendered = promoteLikelyTitle(t.text);
+          rep.push('**Response**', '', rendered, '');
         }
       });
 
